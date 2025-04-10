@@ -111,9 +111,14 @@ export class FaqService {
       },
     })) as DataResponse[]; // Cast to DataResponse array
 
+    const totalPages = Math.ceil(total / options.limit);
+
     return new Pagination<DataResponse>({
       results: mappedFaqs,
       total,
+      total_page: totalPages,
+      page_size: options.limit,
+      current_page: options.page,
     });
   }
 

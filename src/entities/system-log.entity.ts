@@ -7,7 +7,13 @@ export enum SystemLogType {
   CreateManager = 'CREATE_MANAGER',
   FaqCreated = 'FAQ_CREATED',
   CategoryCreated = 'CATEGORY_CREATED',
+  BlogCreated = 'BLOG_CREATED',
+  ServiceCreated = 'SERVICE_CREATED',
+  ServiceDeleted = 'SERVICE_DELETED',
 
+  BlogUpdated = 'BLOG_UPDATED',
+  BlogDeleted = 'BLOG_DELETED',
+  CategoryUpdated = 'CATEGORY_UPDATED',
   DeletedUser = 'DELETED_USER',
 
   FaqUpdated = 'FAQ_UPDATED',

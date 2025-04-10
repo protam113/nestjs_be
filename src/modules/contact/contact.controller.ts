@@ -33,13 +33,15 @@ export class ContactController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page') page: number = 1,
+    @Query('status') status?: string,
     @Query('limit') limit: number = 10
   ): Promise<any> {
-    this.logger.debug('Fetching users with filters:', {
+    this.logger.debug('Fetching contact with filters:', {
       startDate,
       endDate,
       page,
       limit,
+      status,
     });
 
     const options = {
@@ -47,7 +49,8 @@ export class ContactController {
       limit,
     };
 
-    return this.contactService.findAll(options, startDate, endDate);
+    // Pass the status parameter to findAll
+    return this.contactService.findAll(options, startDate, endDate, status);
   }
 
   @Post()

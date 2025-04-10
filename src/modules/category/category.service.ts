@@ -52,9 +52,14 @@ export class CategoryService {
       updatedAt: category.updatedAt || new Date(),
     })) as CategoryEntity[];
 
+    const totalPages = Math.ceil(total / options.limit);
+
     return new Pagination<CategoryEntity>({
       results: mappedCategories,
       total,
+      total_page: totalPages,
+      page_size: options.limit,
+      current_page: options.page,
     });
   }
 
@@ -127,5 +132,20 @@ export class CategoryService {
     }
     const response = this.mapToDataResponse(user);
     return response;
+  }
+
+  async validateCategories(categoryIds: string[]): Promise<boolean> {
+    if (!categoryIds || categoryIds.length === 0) {
+      return true;
+    }
+
+    const categories = await this.categoryModel
+      .find({
+        _id: { $in: categoryIds },
+      })
+      .lean();
+
+    // Check if all provided category IDs exist
+    return categories.length === categoryIds.length;
   }
 }

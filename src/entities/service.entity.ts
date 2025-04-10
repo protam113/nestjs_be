@@ -4,7 +4,7 @@ import { Schema, Prop, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 @Schema()
-export class BlogEntity extends Base {
+export class ServiceEntity extends Base {
   @Prop({ type: String, default: uuidv4 })
   _id: string;
 
@@ -26,14 +26,14 @@ export class BlogEntity extends Base {
   @Prop()
   link?: string;
 
+  @Prop()
+  price?: number;
+
   @Prop({ default: 'show' })
   status: string;
 
   @Prop({ type: Object })
   user: any;
-
-  @Prop({ type: Object })
-  category: any;
 }
-export type BlogDocument = BlogEntity & Document;
-export const BlogSchema = SchemaFactory.createForClass(BlogEntity);
+export type ServiceDocument = ServiceEntity & Document;
+export const ServiceSchema = SchemaFactory.createForClass(ServiceEntity);

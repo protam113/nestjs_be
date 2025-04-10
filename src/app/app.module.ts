@@ -24,6 +24,8 @@ import { HealthModule } from '../modules/health/health.module';
 import { FaqModule } from 'src/modules/faq/faq.module';
 import { CategoryModule } from 'src/modules/category/category.module';
 import { ContactModule } from 'src/modules/contact/contact.module';
+import { BlogModule } from 'src/modules/blog/blog.module';
+import { ServiceModule } from 'src/modules/service/service.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { ContactModule } from 'src/modules/contact/contact.module';
     HealthModule,
     FaqModule,
     CategoryModule,
+    BlogModule,
+    ServiceModule,
     ContactModule,
   ],
   controllers: [AppBaseController], // bỏ HealthController khỏi đây
@@ -81,6 +85,18 @@ export class AppModule implements NestModule {
         },
         {
           path: '/category',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/blog',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/service',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/blog/:slug',
           method: RequestMethod.GET,
         }
       )

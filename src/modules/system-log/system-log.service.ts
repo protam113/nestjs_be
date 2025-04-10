@@ -36,6 +36,7 @@ export class SystemLogService {
     endDate?: string
   ): Promise<Pagination<SystemLogResponse>> {
     const filter: any = {};
+    const { page, limit } = options;
 
     if (startDate && endDate) {
       filter.createdAt = {
@@ -46,8 +47,8 @@ export class SystemLogService {
 
     const logs = await this.systemLogModel
       .find(filter)
-      .skip((options.page - 1) * options.limit)
-      .limit(options.limit)
+      .skip((page - 1) * limit)
+      .limit(limit)
       .sort({ createdAt: -1 })
       .lean()
       .exec();
@@ -61,7 +62,7 @@ export class SystemLogService {
       type: log.type,
       createdAt: log.createdAt ?? new Date(),
       updatedAt: log.updatedAt ?? new Date(),
-      note: log.note ?? '', // fallback nếu thiếu
+      note: log.note ?? '',
       data: log.data ?? null,
       user: log.user
         ? {
@@ -73,9 +74,15 @@ export class SystemLogService {
         : undefined,
     }));
 
+    // Calculate next and previous page links
+    const totalPages = Math.ceil(total / limit);
+
     return new Pagination<SystemLogResponse>({
       results: mappedLogs,
-      total,
+      total: total,
+      total_page: totalPages,
+      page_size: limit,
+      current_page: page,
     });
   }
 

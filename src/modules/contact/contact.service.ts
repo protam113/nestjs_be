@@ -30,9 +30,9 @@ export class ContactService {
   async findAll(
     options: PaginationOptionsInterface,
     startDate?: string,
-    endDate?: string
+    endDate?: string,
+    status?: string
   ): Promise<Pagination<DataResponse>> {
-    // Changed return type to match DataResponse
     const filter: any = {};
 
     if (startDate && endDate) {
@@ -42,8 +42,10 @@ export class ContactService {
       };
     }
 
-    if (filter.status) {
-      filter.status = filter.status;
+    if (status) {
+      // Trim whitespace and convert to lowercase
+      const normalizedStatus = status.trim().toLowerCase();
+      filter.status = normalizedStatus;
     }
 
     const contacts = await this.contactModel
@@ -66,9 +68,14 @@ export class ContactService {
       updatedAt: contact.updatedAt || new Date(),
     })) as DataResponse[];
 
+    const totalPages = Math.ceil(total / options.limit);
+
     return new Pagination<DataResponse>({
       results: mappedContact,
       total,
+      total_page: totalPages,
+      page_size: options.limit,
+      current_page: options.page,
     });
   }
 

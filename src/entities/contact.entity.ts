@@ -3,6 +3,12 @@ import { Document } from 'mongoose';
 import { Base } from './base.entity';
 import { v4 as uuidv4 } from 'uuid';
 
+export enum ContactStatus {
+  Approved = 'approved',
+  Pending = 'pending',
+  Rejected = 'rejected',
+}
+
 @Schema()
 export class ContactEntity extends Base {
   @Prop({ type: String, default: uuidv4 })
@@ -26,8 +32,11 @@ export class ContactEntity extends Base {
   @Prop({ type: [String], required: false })
   services: string[];
 
+  // Remove this line
   @Prop({ type: String, default: 'pending' })
-  status: string;
+  // Keep only this one
+  @Prop({ enum: ContactStatus, default: ContactStatus.Pending })
+  status: ContactStatus;
 }
 
 export type ContactDocument = ContactEntity & Document;
