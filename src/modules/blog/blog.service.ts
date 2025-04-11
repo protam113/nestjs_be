@@ -11,11 +11,13 @@ import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { UserData } from '../user/user.interface';
 import { CreateBlogDto } from './dto/create-blog.dto';
-import { BlogDocument, BlogEntity } from 'src/entities/blog.entity';
+import { BlogDocument, BlogEntity } from '../../entities/blog.entity';
 import { DataResponse } from './responses/data.response';
 import { CategoryService } from '../category/category.service';
 import { Error } from './blog.constant';
 import { BlogStatus } from './blog.constant';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class BlogService {
@@ -25,7 +27,8 @@ export class BlogService {
     @InjectModel(BlogEntity.name)
     private readonly blogModel: Model<BlogDocument>,
     private readonly slugProvider: SlugProvider,
-    private readonly categoryService: CategoryService
+    private readonly categoryService: CategoryService,
+    private readonly redisCacheService: RedisCacheService
   ) {}
 
   async findAll(
@@ -35,43 +38,50 @@ export class BlogService {
     status?: BlogStatus,
     category?: string
   ): Promise<Pagination<DataResponse>> {
-    const filter: any = {};
+    const cacheKey = buildCacheKey('blogs', {
+      page: options.page,
+      limit: options.limit,
+      start: startDate,
+      end: endDate,
+      status: status || 'all',
+      category: category || 'all',
+    });
+    const cached =
+      await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
 
-    if (startDate && endDate) {
-      filter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
     }
 
-    if (status && Object.values(BlogStatus).includes(status)) {
+    const filter: Record<string, any> = {};
+    if (startDate && endDate)
+      filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    if (status && Object.values(BlogStatus).includes(status))
       filter.status = status;
-    }
+    if (category) filter.category = category;
 
-    if (category) {
-      filter.category = category;
-    }
+    const [blogs, total] = await Promise.all([
+      this.blogModel
+        .find(filter)
+        .populate('category', 'name')
+        .skip((options.page - 1) * options.limit)
+        .limit(options.limit)
+        .lean(),
+      this.blogModel.countDocuments(filter),
+    ]);
 
-    const blogs = await this.blogModel
-      .find(filter)
-      .populate('category', 'name')
-      .skip((options.page - 1) * options.limit)
-      .limit(options.limit)
-      .lean();
-
-    const total = await this.blogModel.countDocuments(filter);
-
-    const mappedBlogs = blogs.map(this.mapToDataResponse);
-
-    const totalPages = Math.ceil(total / options.limit);
-
-    return new Pagination<DataResponse>({
-      results: mappedBlogs,
+    const results = blogs.map(this.mapToDataResponse);
+    const result = new Pagination<DataResponse>({
+      results,
       total,
-      total_page: totalPages,
+      total_page: Math.ceil(total / options.limit),
       page_size: options.limit,
       current_page: options.page,
     });
+
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    return result;
   }
 
   async create(
@@ -79,26 +89,17 @@ export class BlogService {
     user: UserData
   ): Promise<BlogDocument> {
     const { title, content, description, category } = createBlogDto;
-
-    // Generate slug from title
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
-    // Check if blog with same title/slug exists
-    const existingBlog = await this.blogModel.findOne({
+    const blogExists = await this.blogModel.findOne({
       $or: [{ title }, { slug }],
     });
+    if (blogExists) throw new BadRequestException(Error.ThisBlogAlreadyExists);
 
-    if (existingBlog) {
-      throw new BadRequestException(Error.ThisBlogAlreadyExists);
-    }
-
-    // Validate categories if provided
     if (category) {
-      const validCategories =
-        await this.categoryService.validateCategories(category);
-      if (!validCategories) {
+      const valid = await this.categoryService.validateCategories(category);
+      if (!valid)
         throw new BadRequestException('Invalid category IDs provided');
-      }
     }
 
     const newBlog = new this.blogModel({
@@ -107,7 +108,7 @@ export class BlogService {
       content,
       description,
       category,
-      status: BlogStatus.Show, // Default status
+      status: BlogStatus.Show,
       user: {
         userId: user._id,
         username: user.username,
@@ -120,22 +121,31 @@ export class BlogService {
 
   async delete(id: string): Promise<void> {
     const result = await this.blogModel.findByIdAndDelete(id);
-    if (!result) {
-      throw new NotFoundException('Blog not found');
-    }
+    if (!result) throw new NotFoundException('Blog not found');
   }
 
   async findBySlug(slug: string): Promise<DataResponse> {
+    const cacheKey = `blog_${slug}`;
+    const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
     const blog = await this.blogModel
       .findOne({ slug })
       .populate('category', 'name')
       .lean();
+    if (!blog) throw new NotFoundException(Error.BlogNotFound);
 
-    if (!blog) {
-      throw new NotFoundException(Error.BlogNotFound);
-    }
+    const result = this.mapToDataResponse(blog);
 
-    return this.mapToDataResponse(blog);
+    await this.redisCacheService
+      .set(cacheKey, result, 3600)
+      .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
+
+    return result;
   }
 
   private mapToDataResponse(blog: any): DataResponse {
@@ -150,8 +160,8 @@ export class BlogService {
         link: blog.link,
         category: blog.category,
         status: blog.status,
-        createdAt: blog.createdAt || new Date(),
-        updatedAt: blog.updatedAt || new Date(),
+        createdAt: blog.createdAt ?? new Date(),
+        updatedAt: blog.updatedAt ?? new Date(),
       },
     };
   }

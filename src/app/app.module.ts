@@ -7,13 +7,16 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { AppBaseController } from './app.base.controller';
 import { APP_GUARD } from '@nestjs/core';
-import { RolesGuard } from 'src/modules/auth/guards/RolesGuard';
+import { RolesGuard } from '../modules/auth/guards/RolesGuard';
+import { CorsMiddleware } from '../middleware/cors.middleware';
+import { ScheduleModule } from '@nestjs/schedule';
 
 import { CsrfMiddleware } from '../middleware/csrf.middleware';
 import { RateLimitMiddleware } from '../middleware/rate-limiter.middleware';
 import { RequestLoggerMiddleware } from '../middleware/request-logger.middleware';
 import { JwtCookieMiddleware } from '../middleware/jwt-cookie.middleware';
 import { ApiKeyMiddleware } from '../middleware/api-key.middleware';
+import { ChecksumMiddleware } from '../middleware/checksum.middleware';
 
 import { DatabaseModule } from '../database/database.module';
 
@@ -21,11 +24,13 @@ import { UserModule } from '../modules/user/user.module';
 import { AuthModule } from '../modules/auth/auth.module';
 import { AppService } from './app.service';
 import { HealthModule } from '../modules/health/health.module';
-import { FaqModule } from 'src/modules/faq/faq.module';
-import { CategoryModule } from 'src/modules/category/category.module';
-import { ContactModule } from 'src/modules/contact/contact.module';
-import { BlogModule } from 'src/modules/blog/blog.module';
-import { ServiceModule } from 'src/modules/service/service.module';
+import { FaqModule } from '../modules/faq/faq.module';
+import { CategoryModule } from '../modules/category/category.module';
+import { ContactModule } from '../modules/contact/contact.module';
+import { BlogModule } from '../modules/blog/blog.module';
+import { ServiceModule } from '../modules/service/service.module';
+import { RedisCacheModule } from '../modules/cache/redis-cache.module';
+import { BackupModule } from '../modules/backup/backup.module';
 
 @Module({
   imports: [
@@ -34,7 +39,10 @@ import { ServiceModule } from 'src/modules/service/service.module';
       envFilePath: '.env',
     }),
     DatabaseModule,
+    RedisCacheModule,
     AuthModule,
+    ScheduleModule.forRoot(),
+    BackupModule,
     UserModule,
     HealthModule,
     FaqModule,
@@ -43,7 +51,7 @@ import { ServiceModule } from 'src/modules/service/service.module';
     ServiceModule,
     ContactModule,
   ],
-  controllers: [AppBaseController], // bỏ HealthController khỏi đây
+  controllers: [AppBaseController],
   providers: [
     {
       provide: 'app',
@@ -62,13 +70,26 @@ export class AppModule implements NestModule {
     // Request logger middleware
     consumer.apply(RequestLoggerMiddleware).forRoutes('*');
 
+    consumer.apply(CorsMiddleware).forRoutes('*');
+
     // API Key middleware
-    consumer.apply(ApiKeyMiddleware).forRoutes('*');
+    consumer
+      .apply(ApiKeyMiddleware)
+
+      .forRoutes('*');
 
     // CSRF middleware - Apply to all routes
-    consumer.apply(CsrfMiddleware).forRoutes('*');
+    consumer
+      .apply(CsrfMiddleware)
+      .exclude({
+        path: '/public/auth/login',
+        method: RequestMethod.POST,
+      })
+      .forRoutes('*');
 
     consumer.apply(RateLimitMiddleware).forRoutes('*');
+
+    consumer.apply(ChecksumMiddleware).forRoutes('public/auth/login');
 
     // JWT Cookie middleware
     consumer
@@ -92,11 +113,19 @@ export class AppModule implements NestModule {
           method: RequestMethod.GET,
         },
         {
+          path: '/blog/:slug',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/faqs',
+          method: RequestMethod.GET,
+        },
+        {
           path: '/service',
           method: RequestMethod.GET,
         },
         {
-          path: '/blog/:slug',
+          path: '/service/:slug',
           method: RequestMethod.GET,
         }
       )

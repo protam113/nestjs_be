@@ -11,11 +11,13 @@ import { ContactEntity } from '../../entities/contact.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { Error } from './contact.constant';
-import { EmailService } from 'src/services/email.service';
+import { EmailService } from '../../services/email.service';
 import { DataResponse } from './responses/data.response';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { UserData } from '../user/user.interface';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class ContactService {
@@ -24,7 +26,8 @@ export class ContactService {
   constructor(
     @InjectModel(ContactEntity.name)
     private readonly contactModel: Model<ContactDocument>,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
+    private readonly redisCacheService: RedisCacheService
   ) {}
 
   async findAll(
@@ -33,6 +36,21 @@ export class ContactService {
     endDate?: string,
     status?: string
   ): Promise<Pagination<DataResponse>> {
+    const cacheKey = buildCacheKey('contacts', {
+      page: options.page,
+      limit: options.limit,
+      start: startDate,
+      end: endDate,
+      status: status || 'all',
+    });
+    const cached =
+      await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
     const filter: any = {};
 
     if (startDate && endDate) {
@@ -56,7 +74,7 @@ export class ContactService {
 
     const total = await this.contactModel.countDocuments(filter);
 
-    const mappedContact = contacts.map((contact) => ({
+    const results = contacts.map((contact) => ({
       _id: contact._id,
       name: contact.name,
       email: contact.email,
@@ -68,15 +86,16 @@ export class ContactService {
       updatedAt: contact.updatedAt || new Date(),
     })) as DataResponse[];
 
-    const totalPages = Math.ceil(total / options.limit);
-
-    return new Pagination<DataResponse>({
-      results: mappedContact,
+    const result = new Pagination<DataResponse>({
+      results,
       total,
-      total_page: totalPages,
+      total_page: Math.ceil(total / options.limit),
       page_size: options.limit,
       current_page: options.page,
     });
+
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    return result;
   }
 
   async findOne(_id: string): Promise<ContactDocument> {

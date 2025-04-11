@@ -1,0 +1,21 @@
+```yaml
+name: 🧪 Auth Module Test - Local Run
+
+on: manual
+
+steps:
+  - name: ⬇️ Run Auth Tests
+    run: |
+      yarn test test/auth/tests
+
+      # Expected output:
+      # PASS  src/modules/auth/tests/auth.service.spec.ts (7.54 s)
+      # PASS  src/modules/auth/tests/auth.controller.spec.ts (7.723 s)
+      #
+      # Test Suites: 2 passed, 2 total
+      # Tests:       6 passed, 6 total
+      # Snapshots:   0 total
+      # Time:        9.698 s
+      # Ran all test suites matching /src\\modules\\auth\\tests/i.
+      # Done in 17.07s.
+```

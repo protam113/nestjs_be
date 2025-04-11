@@ -13,6 +13,8 @@ import { FaqEntity } from '../../entities/faq.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { Error } from './faq.constant';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class FaqService {
@@ -20,7 +22,8 @@ export class FaqService {
 
   constructor(
     @InjectModel(FaqEntity.name)
-    private readonly faqModel: Model<FaqDocument>
+    private readonly faqModel: Model<FaqDocument>,
+    private readonly redisCacheService: RedisCacheService
   ) {}
 
   async created(
@@ -70,6 +73,20 @@ export class FaqService {
     startDate?: string,
     endDate?: string
   ): Promise<Pagination<DataResponse>> {
+    const cacheKey = buildCacheKey('faq', {
+      page: options.page,
+      limit: options.limit,
+      start: startDate,
+      end: endDate,
+      status: 'all', // Fix: Remove reference to undefined 'status' variable
+    });
+    const cached =
+      await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
     // Changed return type temporarily
     const filter: any = {};
 
@@ -97,29 +114,30 @@ export class FaqService {
     const total = await this.faqModel.countDocuments(filter);
 
     const mappedFaqs = faqs.map((faq) => ({
-      _id: faq._id.toString(), // Convert to string
+      _id: faq._id.toString(),
       question: faq.question,
       answer: faq.answer,
       createdAt: faq.createdAt || new Date(),
       updatedAt: faq.updatedAt || new Date(),
       status: faq.status,
       user: {
-        _id: faq.user?._id?.toString(), // Convert to string and handle potential null/undefined
+        _id: faq.user?._id?.toString(),
         username: faq.user?.username,
         name: faq.user?.name,
         role: faq.user?.role,
       },
-    })) as DataResponse[]; // Cast to DataResponse array
+    })) as DataResponse[];
 
-    const totalPages = Math.ceil(total / options.limit);
-
-    return new Pagination<DataResponse>({
+    const result = new Pagination<DataResponse>({
       results: mappedFaqs,
       total,
-      total_page: totalPages,
+      total_page: Math.ceil(total / options.limit),
       page_size: options.limit,
       current_page: options.page,
     });
+
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    return result;
   }
 
   async findOne(id: string): Promise<FaqDocument> {

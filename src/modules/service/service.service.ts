@@ -13,7 +13,9 @@ import { UserData } from '../user/user.interface';
 import { CreateServiceDto } from './dto/create-service';
 import { DataResponse } from './responses/service.response';
 import { Error, ServiceStatus } from './service.constant';
-import { ServiceDocument, ServiceEntity } from 'src/entities/service.entity';
+import { ServiceDocument, ServiceEntity } from '../../entities/service.entity';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class ServiceService {
@@ -22,7 +24,8 @@ export class ServiceService {
   constructor(
     @InjectModel(ServiceEntity.name)
     private readonly serviceModel: Model<ServiceDocument>,
-    private readonly slugProvider: SlugProvider
+    private readonly slugProvider: SlugProvider,
+    private readonly redisCacheService: RedisCacheService
   ) {}
 
   async findAll(
@@ -31,6 +34,21 @@ export class ServiceService {
     endDate?: string,
     status?: ServiceStatus
   ): Promise<Pagination<DataResponse>> {
+    const cacheKey = buildCacheKey('services', {
+      page: options.page,
+      limit: options.limit,
+      start: startDate,
+      end: endDate,
+      status: status || 'all',
+    });
+    const cached =
+      await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
     const filter: any = {};
 
     if (startDate && endDate) {
@@ -52,17 +70,18 @@ export class ServiceService {
 
     const total = await this.serviceModel.countDocuments(filter);
 
-    const mapped = services.map(this.mapToDataResponse);
+    const results = services.map(this.mapToDataResponse);
 
-    const totalPages = Math.ceil(total / options.limit);
-
-    return new Pagination<DataResponse>({
-      results: mapped,
+    const result = new Pagination<DataResponse>({
+      results,
       total,
-      total_page: totalPages,
+      total_page: Math.ceil(total / options.limit),
       page_size: options.limit,
       current_page: options.page,
     });
+
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    return result;
   }
 
   async create(
@@ -108,13 +127,25 @@ export class ServiceService {
   }
 
   async findBySlug(slug: string): Promise<DataResponse> {
+    const cacheKey = `blog_${slug}`;
+    const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
     const service = await this.serviceModel.findOne({ slug }).lean();
 
     if (!service) {
       throw new NotFoundException(Error.ServiceNotFound);
     }
+    const result = this.mapToDataResponse(service);
 
-    return this.mapToDataResponse(service);
+    await this.redisCacheService
+      .set(cacheKey, result, 3600)
+      .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
+
+    return result;
   }
 
   private mapToDataResponse(service: any): DataResponse {

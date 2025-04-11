@@ -8,9 +8,11 @@ import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { CategoryDocument } from './category.interface';
 import { DataResponse } from './responses/data.response';
-import { Error } from './category.constant';
+import { Error, StatusCode } from './category.constant';
 import { UserData } from '../user/user.interface';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class CategoryService {
@@ -19,7 +21,8 @@ export class CategoryService {
   constructor(
     @InjectModel(CategoryEntity.name)
     private readonly categoryModel: Model<CategoryDocument>,
-    private readonly slugProvider: SlugProvider
+    private readonly slugProvider: SlugProvider,
+    private readonly redisCacheService: RedisCacheService
   ) {}
 
   async findAll(
@@ -27,6 +30,20 @@ export class CategoryService {
     startDate?: string,
     endDate?: string
   ): Promise<Pagination<CategoryEntity>> {
+    const cacheKey = buildCacheKey('categories', {
+      page: options.page,
+      limit: options.limit,
+      start: startDate,
+      end: endDate,
+    });
+    const cached =
+      await this.redisCacheService.get<Pagination<CategoryEntity>>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
     const filter: any = {};
 
     if (startDate && endDate) {
@@ -52,15 +69,16 @@ export class CategoryService {
       updatedAt: category.updatedAt || new Date(),
     })) as CategoryEntity[];
 
-    const totalPages = Math.ceil(total / options.limit);
-
-    return new Pagination<CategoryEntity>({
+    const result = new Pagination<CategoryEntity>({
       results: mappedCategories,
       total,
-      total_page: totalPages,
+      total_page: Math.ceil(total / options.limit),
       page_size: options.limit,
       current_page: options.page,
     });
+
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    return result;
   }
 
   async created(
@@ -92,11 +110,13 @@ export class CategoryService {
       },
     });
 
-    // ✅ Lưu category
     try {
-      return await newCategory.save();
+      const saved = await newCategory.save();
+
+      await this.redisCacheService.reset();
+
+      return saved;
     } catch (err) {
-      // Nếu lỗi do trùng unique (MongoDB index)
       if (err.code === 11000) {
         throw new BadRequestException(Error.ThisCategoryAlreadyExists);
       }
@@ -116,13 +136,30 @@ export class CategoryService {
     };
   }
 
-  async findBySlug(slug: string): Promise<DataResponse | null> {
+  async findBySlug(slug: string): Promise<DataResponse> {
+    const cacheKey = `blog_${slug}`;
+    const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
     const category = await this.categoryModel.findOne({ slug }).lean();
     if (!category) {
-      return null;
+      throw new BadRequestException({
+        statusCode: StatusCode.NotFound,
+        message: 'Category not found',
+        error: 'Not Found',
+      });
     }
-    const response = this.mapToDataResponse(category);
-    return response;
+
+    const result = this.mapToDataResponse(category);
+    await this.redisCacheService
+      .set(cacheKey, result, 3600)
+      .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
+
+    return result;
   }
 
   async findByUuid(_id: string): Promise<DataResponse | null> {
@@ -147,5 +184,79 @@ export class CategoryService {
 
     // Check if all provided category IDs exist
     return categories.length === categoryIds.length;
+  }
+
+  async update(
+    _id: string,
+    updateData: { name: string },
+    user: UserData
+  ): Promise<CategoryDocument> {
+    // Find existing category
+    const category = await this.categoryModel.findById(_id);
+    if (!category) {
+      throw new BadRequestException({
+        statusCode: StatusCode.NotFound,
+        message: Error.CategoryNotFound,
+        error: 'Not Found',
+      });
+    }
+
+    // Validate input
+    if (!updateData.name) {
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: 'Name is required',
+        error: 'Bad Request',
+      });
+    }
+
+    const normalizedName = updateData.name.trim();
+    if (normalizedName === category.name) {
+      return category;
+    }
+
+    // Check for duplicate name
+    const existingCategory = await this.categoryModel.findOne({
+      _id: { $ne: _id },
+      name: normalizedName,
+    });
+
+    if (existingCategory) {
+      throw new BadRequestException({
+        statusCode: StatusCode.Conflict,
+        message: Error.ThisCategoryAlreadyExists,
+        error: 'Conflict',
+      });
+    }
+
+    try {
+      category.name = normalizedName;
+      category.slug = this.slugProvider.generateSlug(normalizedName, {
+        unique: true,
+      });
+      category.updatedAt = new Date();
+      category.user = {
+        userId: user._id,
+        username: user.username,
+        role: user.role,
+      };
+
+      const updatedCategory = await category.save();
+      await this.redisCacheService.reset();
+      return updatedCategory;
+    } catch (err) {
+      if (err.code === 11000) {
+        throw new BadRequestException({
+          statusCode: StatusCode.Conflict,
+          message: Error.ThisCategoryAlreadyExists,
+          error: 'Conflict',
+        });
+      }
+      throw new BadRequestException({
+        statusCode: StatusCode.ServerError,
+        message: 'Internal server error',
+        error: 'Internal Server Error',
+      });
+    }
   }
 }

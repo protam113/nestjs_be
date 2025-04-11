@@ -1,11 +1,13 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Body, Controller, Post, Res, UseInterceptors } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Response } from 'express';
+import { HttpCode } from '@nestjs/common';
 
 import { AuthService } from './auth.service';
 import { LogInDTO } from './dtos/log-in.dto';
 import { AuthSuccess } from './auth.constant';
 import { LogInResponse } from './responses/log-in.response';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('public/auth')
 export class AuthPublicController {
@@ -15,6 +17,8 @@ export class AuthPublicController {
   ) {}
 
   @Post('login')
+  @HttpCode(200)
+  // @UseInterceptors(FileInterceptor(''))
   async login(
     @Body() dto: LogInDTO,
     @Res({ passthrough: true }) res: Response

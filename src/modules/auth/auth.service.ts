@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
@@ -9,15 +8,15 @@ import { LogInResponse } from './responses/log-in.response';
 import { AuthError, AuthSuccess } from './auth.constant';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '../../common/enums/role.enum';
-import { response } from 'express';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-    private readonly configService: ConfigService,
-    private readonly jwtService: JwtService
+    private readonly configService: ConfigService
   ) {}
 
   async onModuleInit() {
@@ -64,7 +63,7 @@ export class AuthService implements OnModuleInit {
   }
 
   async validateAttemptAndSignToken(dto: LogInDTO): Promise<LogInResponse> {
-    if (!dto.attempt || typeof dto.attempt !== 'string') {
+    if (!dto.password || typeof dto.password !== 'string') {
       throw new BadRequestException('Password is required');
     }
 
@@ -76,7 +75,7 @@ export class AuthService implements OnModuleInit {
       throw new BadRequestException(AuthError.InvalidLoginCredentials);
     }
 
-    const isValidPassword = await user.comparePassword(dto.attempt);
+    const isValidPassword = await user.comparePassword(dto.password);
 
     if (!isValidPassword) {
       throw new BadRequestException(AuthError.InvalidLoginCredentials);

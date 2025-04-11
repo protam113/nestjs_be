@@ -12,5 +12,5 @@ export class LogInDTO {
   @IsNotEmpty()
   @IsString()
   @Transform(({ value }) => value)
-  readonly attempt!: string;
+  readonly password!: string;
 }

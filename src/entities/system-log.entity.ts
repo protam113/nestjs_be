@@ -1,6 +1,7 @@
 // entities/system-log.entity.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Base } from './base.entity';
+import { v4 as uuidv4 } from 'uuid';
 
 export enum SystemLogType {
   UserStatistic = 'USER_STATISTIC',
@@ -32,6 +33,9 @@ export enum Status {
 
 @Schema() // tương đương CreateDateColumn
 export class SystemLog extends Base {
+  @Prop({ type: String, default: uuidv4 })
+  _id: string;
+
   @Prop({ enum: SystemLogType, required: true })
   type: SystemLogType;
 

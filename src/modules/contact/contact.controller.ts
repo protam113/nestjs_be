@@ -14,7 +14,7 @@ import {
 import { ContactService } from './contact.service';
 import { SystemLogService } from '../system-log/system-log.service';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
-import { Status, SystemLogType } from 'src/entities/system-log.entity';
+import { Status, SystemLogType } from '../../entities/system-log.entity';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 

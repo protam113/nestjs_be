@@ -15,7 +15,6 @@ export class ApiKeyMiddleware implements NestMiddleware {
     const apiKey = req.headers['api-key'] as string;
     const validKey = this.configService.get<string>('NEXT_PRIVATE_API_KEY');
 
-    console.log('API Key:', apiKey);
     console.log('Headers:', req.headers);
 
     if (!validKey) {

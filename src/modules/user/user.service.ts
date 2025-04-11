@@ -1,13 +1,15 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as bcrypt from 'bcrypt';
-
 import { User, UserDocument } from '../../entities/user.entity';
 import { UserError } from './user.constant';
 import type { UserData, UserResponse } from './user.interface';
 import { Role } from '../../common/enums/role.enum';
 import { CreateManagerDto } from './dto/create-manager.dto';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
+import { Pagination } from '../paginate/pagination';
+import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 
 @Injectable()
 export class UserService {
@@ -15,25 +17,41 @@ export class UserService {
 
   constructor(
     @InjectModel(User.name)
-    private readonly userModel: Model<UserDocument>
+    private readonly userModel: Model<UserDocument>,
+    private readonly redisCacheService: RedisCacheService
   ) {}
 
   async getAllUsers(
-    role?: Role, // Lọc theo role
-    startDate?: string, // Lọc theo ngày tạo bắt đầu
-    endDate?: string, // Lọc theo ngày tạo kết thúc
-    searchQuery?: string, // Tìm kiếm theo username, email, phoneNumber
-    page: number = 1, // Số trang, mặc định là 1
-    limit: number = 10 // Số mục trên mỗi trang
-  ): Promise<any> {
-    const filter: any = {}; // Đối tượng chứa điều kiện lọc
+    role?: Role,
+    startDate?: string,
+    endDate?: string,
+    searchQuery?: string,
+    page: number = 1,
+    limit: number = 10
+  ): Promise<Pagination<UserResponse>> {
+    const cacheKey = buildCacheKey('users', {
+      page,
+      limit,
+      start: startDate,
+      end: endDate,
+      role: role || 'all',
+      search: searchQuery || '',
+    });
 
-    // Lọc theo role nếu có
+    const cached =
+      await this.redisCacheService.get<Pagination<UserResponse>>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
+    const filter: any = {};
+
     if (role) {
       filter.role = role;
     }
 
-    // Lọc theo ngày tạo nếu có
     if (startDate && endDate) {
       filter.createdAt = {
         $gte: new Date(startDate),
@@ -41,7 +59,6 @@ export class UserService {
       };
     }
 
-    // Lọc theo tìm kiếm (username, email, phoneNumber)
     if (searchQuery) {
       filter.$or = [
         { username: { $regex: searchQuery, $options: 'i' } },
@@ -50,41 +67,37 @@ export class UserService {
       ];
     }
 
-    // Truy vấn người dùng từ cơ sở dữ liệu với phân trang
     const users = await this.userModel
       .find(filter)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
-    // Tính toán tổng số người dùng để phân trang
-    const totalItems = await this.userModel.countDocuments(filter);
-    const totalPages = Math.ceil(totalItems / limit);
+    const total = await this.userModel.countDocuments(filter);
 
-    // Định dạng lại dữ liệu người dùng theo yêu cầu
-    const result = users.map((user) => {
-      const { _id, name, username, role, email, phoneNumber, __v } = user;
-      return {
-        _id,
-        name,
-        username,
-        role, // Chuyển role thành mảng
-        email,
-        phoneNumber,
-        __v,
-      };
+    const results = users.map((user) => ({
+      status: 'success',
+      message: 'User retrieved successfully',
+      user: {
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        role: user.role,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+      },
+    })) as UserResponse[];
+
+    const result = new Pagination<UserResponse>({
+      results,
+      total,
+      total_page: Math.ceil(total / limit),
+      page_size: limit,
+      current_page: page,
     });
 
-    // Trả về kết quả với dữ liệu người dùng và thông tin phân trang
-    return {
-      result,
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalItems,
-        itemsPerPage: limit,
-      },
-    };
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    return result;
   }
 
   async createManagerUser(
@@ -184,11 +197,31 @@ export class UserService {
   }
 
   async findByUuid(_id: string): Promise<UserResponse | null> {
+    // Create cache key using only the user ID
+    const cacheKey = buildCacheKey('user', { id: _id });
+
+    // Try to get from cache first
+    const cached = await this.redisCacheService.get<UserResponse>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
+    // If not in cache, get from database
     const user = await this.userModel.findById(_id).lean();
     if (!user) {
       return null;
     }
+
+    // Map to response format
     const response = this.mapToUserResponse(user);
+
+    // Save to cache for 1 hour (3600 seconds)
+    await this.redisCacheService
+      .set(cacheKey, response, 3600)
+      .catch((err) => this.logger.error('Cache set failed:', err));
+
     return response;
   }
 

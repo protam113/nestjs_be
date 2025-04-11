@@ -3,16 +3,20 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Param,
   Logger,
   UseGuards,
   Query,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
 import { CategoryService } from './category.service';
 import { SystemLogService } from '../system-log/system-log.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
-import { Status, SystemLogType } from 'src/entities/system-log.entity';
+import { Status, SystemLogType } from '../../entities/system-log.entity';
+import { StatusCode } from './category.constant';
 
 @Controller('category')
 export class CategoryController {
@@ -62,5 +66,46 @@ export class CategoryController {
     });
 
     return category;
+  }
+
+  @Get('/:slug')
+  async findBySlug(@Param('slug') slug: string) {
+    const category = await this.categoryService.findBySlug(slug);
+    if (!category) {
+      throw new BadRequestException({
+        statusCode: StatusCode.ServerError,
+        message: 'Category not found',
+        error: 'Not Found',
+      });
+    }
+    return category;
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  async update(
+    @Param('id') id: string,
+    @Body() updateData: { name: string },
+    @Req() req
+  ) {
+    const updatedCategory = await this.categoryService.update(
+      id,
+      updateData,
+      req.user
+    );
+
+    await this.systemLogService.log({
+      type: SystemLogType.CategoryUpdated,
+      note: `User ${req.user.email} updated CATEGORY ${id}`,
+      status: Status.Success,
+      data: {
+        user: req.user,
+        id: updatedCategory._id,
+        title: updatedCategory.name,
+        changes: updateData,
+      },
+    });
+
+    return updatedCategory;
   }
 }

@@ -15,7 +15,7 @@ import { FaqService } from './faq.service';
 import { CreateFaqDto, UpdateFaqDto, FaqFilterQuery } from './faq.interface';
 import { SystemLogService } from '../system-log/system-log.service';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
-import { Status, SystemLogType } from 'src/entities/system-log.entity';
+import { Status, SystemLogType } from '../../entities/system-log.entity';
 
 @Controller('faqs')
 export class FaqController {

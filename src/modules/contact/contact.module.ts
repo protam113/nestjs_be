@@ -5,12 +5,14 @@ import { ContactController } from './contact.controller';
 import { ContactService } from './contact.service';
 import { EmailModule } from '../../common/email/email.module';
 import { SystemLogModule } from '../system-log/system-log.module';
+import { RedisCacheModule } from '../cache/redis-cache.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: ContactEntity.name, schema: ContactSchema },
     ]),
+    RedisCacheModule,
     EmailModule,
     SystemLogModule,
   ],

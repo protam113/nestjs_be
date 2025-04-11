@@ -1,6 +1,6 @@
 // src/common/email/email.module.ts
 import { Module } from '@nestjs/common';
-import { EmailService } from 'src/services/email.service';
+import { EmailService } from '../../services/email.service';
 
 @Module({
   providers: [EmailService],

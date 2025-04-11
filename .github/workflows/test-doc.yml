@@ -1,0 +1,7 @@
+.github/
+└── workflows/
+    └── auth/
+        └── test.yml          # ✅ CI pipeline để test module Auth
+
+docs/
+└── test-doc.yml              # 📄 Tài liệu hướng dẫn test toàn dự án, dạng YAML (chỉ để đọc, không chạy)

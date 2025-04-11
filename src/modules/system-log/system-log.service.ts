@@ -6,6 +6,8 @@ import { SystemLog, SystemLogType } from '../../entities/system-log.entity';
 import { CreateSystemLogDTO, SystemLogResponse } from './system-log.interface';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
+import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class SystemLogService {
@@ -13,7 +15,8 @@ export class SystemLogService {
 
   constructor(
     @InjectModel(SystemLog.name)
-    private readonly systemLogModel: Model<SystemLog>
+    private readonly systemLogModel: Model<SystemLog>,
+    private readonly redisCacheService: RedisCacheService
   ) {}
 
   async log(createSystemLogDto: CreateSystemLogDTO): Promise<SystemLog> {
@@ -35,6 +38,22 @@ export class SystemLogService {
     startDate?: string,
     endDate?: string
   ): Promise<Pagination<SystemLogResponse>> {
+    const cacheKey = buildCacheKey('logs', {
+      page: options.page,
+      limit: options.limit,
+      start: startDate,
+      end: endDate,
+      // Remove status from cache key since it's not a parameter
+    });
+
+    const cached =
+      await this.redisCacheService.get<Pagination<SystemLogResponse>>(cacheKey);
+
+    if (cached) {
+      this.logger.log(`Cache HIT: ${cacheKey}`);
+      return cached;
+    }
+
     const filter: any = {};
     const { page, limit } = options;
 
@@ -74,16 +93,16 @@ export class SystemLogService {
         : undefined,
     }));
 
-    // Calculate next and previous page links
-    const totalPages = Math.ceil(total / limit);
-
-    return new Pagination<SystemLogResponse>({
+    const result = new Pagination<SystemLogResponse>({
       results: mappedLogs,
       total: total,
-      total_page: totalPages,
+      total_page: Math.ceil(total / options.limit),
       page_size: limit,
       current_page: page,
     });
+
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    return result;
   }
 
   // Thêm phương thức tìm thống kê người dùng mới nhất

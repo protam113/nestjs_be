@@ -21,7 +21,7 @@ import { Role } from '../../common/enums/role.enum';
 import { UserResponse } from './user.interface';
 import { SystemLogService } from '../system-log/system-log.service';
 import { RolesGuard } from '../auth/guards/RolesGuard';
-import { Status, SystemLogType } from 'src/entities/system-log.entity';
+import { Status, SystemLogType } from '../../entities/system-log.entity';
 
 @Controller('users')
 export class UserController {
