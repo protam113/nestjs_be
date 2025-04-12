@@ -22,6 +22,8 @@ import { UserResponse } from './user.interface';
 import { SystemLogService } from '../system-log/system-log.service';
 import { RolesGuard } from '../auth/guards/RolesGuard';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
+import { UpdatePasswordDto } from './dto/update-password.dto';
+import { VerifyCodeDto } from './dto/verify-code.dto';
 
 @Controller('users')
 export class UserController {
@@ -128,5 +130,49 @@ export class UserController {
     });
 
     return result;
+  }
+
+  @Post('update-password')
+  @UseGuards(JwtAuthGuard)
+  async updatePassword(
+    @Req() req,
+    @Body() updatePasswordDto: UpdatePasswordDto
+  ) {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      throw new BadRequestException('Invalid token: Missing user ID');
+    }
+
+    return this.userService.initiatePasswordChange(userId, updatePasswordDto);
+  }
+
+  @Post('initiate-password-change')
+  @UseGuards(JwtAuthGuard)
+  async initiatePasswordChange(
+    @Req() req,
+    @Body() updatePasswordDto: UpdatePasswordDto
+  ) {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('Invalid token: Missing user ID');
+    }
+    return this.userService.initiatePasswordChange(userId, updatePasswordDto);
+  }
+
+  @Post('verify-code')
+  @UseGuards(JwtAuthGuard)
+  async verifyCodeAndUpdatePassword(
+    @Req() req,
+    @Body() verifyCodeDto: VerifyCodeDto
+  ) {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('Invalid token: Missing user ID');
+    }
+    return this.userService.verifyCodeAndUpdatePassword(
+      userId,
+      verifyCodeDto.code
+    );
   }
 }

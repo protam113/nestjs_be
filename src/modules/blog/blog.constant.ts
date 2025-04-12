@@ -2,6 +2,8 @@ export const INITIAL_COUNT_OF_EACH_STATUS = 0;
 export enum Error {
   ThisBlogAlreadyExists = 'This blog already exists',
   BlogNotFound = 'Blog not found',
+  InvalidCategoryId = 'Invalid category ID format',
+  InvalidCategoryUUIDs = 'Invalid category UUIDs provided',
 }
 
 export enum Success {

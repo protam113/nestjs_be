@@ -2,6 +2,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Base } from './base.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { COLLECTION_KEYS } from 'src/database/collections';
 
 export enum SystemLogType {
   UserStatistic = 'USER_STATISTIC',
@@ -11,15 +12,16 @@ export enum SystemLogType {
   BlogCreated = 'BLOG_CREATED',
   ServiceCreated = 'SERVICE_CREATED',
   ServiceDeleted = 'SERVICE_DELETED',
-
+  PricingCreated = 'PRICING_CREATED',
   BlogUpdated = 'BLOG_UPDATED',
   BlogDeleted = 'BLOG_DELETED',
   CategoryUpdated = 'CATEGORY_UPDATED',
   DeletedUser = 'DELETED_USER',
-
+  DeletedContact = 'DELETED_CONTACT',
+  PricingDeleted = 'PRICING_DELETED',
+  PricingUpdated = 'PRICING_UPDATED',
   FaqUpdated = 'FAQ_UPDATED',
   FaqDeleted = 'FAQ_DELETED',
-  // thêm mấy cái khác nếu cần
   UpdateStatus = 'UPDATE_STATUS',
   SentMail = 'SENT_MAIL',
 }
@@ -49,3 +51,4 @@ export class SystemLog extends Base {
 }
 
 export const SystemLogSchema = SchemaFactory.createForClass(SystemLog);
+SystemLogSchema.set('collection', COLLECTION_KEYS.SYSTEMLOGS);

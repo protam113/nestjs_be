@@ -87,10 +87,8 @@ export class CategoryService {
   ): Promise<CategoryDocument> {
     const { name } = createCategoryDto;
 
-    // ✅ Tạo slug từ name
     const slug = this.slugProvider.generateSlug(name, { unique: true });
 
-    // ✅ Kiểm tra trùng tên hoặc slug
     const existingCategory = await this.categoryModel.findOne({
       $or: [{ name }, { slug }],
     });
@@ -149,7 +147,7 @@ export class CategoryService {
     if (!category) {
       throw new BadRequestException({
         statusCode: StatusCode.NotFound,
-        message: 'Category not found',
+        message: Error.CategoryNotFound,
         error: 'Not Found',
       });
     }
@@ -205,7 +203,7 @@ export class CategoryService {
     if (!updateData.name) {
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
-        message: 'Name is required',
+        message: Error.CategoryRequired,
         error: 'Bad Request',
       });
     }
@@ -254,7 +252,7 @@ export class CategoryService {
       }
       throw new BadRequestException({
         statusCode: StatusCode.ServerError,
-        message: 'Internal server error',
+        message: Error.InternalServer,
         error: 'Internal Server Error',
       });
     }

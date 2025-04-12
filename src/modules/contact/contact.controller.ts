@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
+import { ContactStatus } from './contact.constant';
 
 @Controller('contact')
 export class ContactController {
@@ -33,8 +34,9 @@ export class ContactController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page') page: number = 1,
-    @Query('status') status?: string,
-    @Query('limit') limit: number = 10
+    @Query('status') status?: ContactStatus,
+    @Query('limit') limit: number = 10,
+    @Query('service') service?: string
   ): Promise<any> {
     this.logger.debug('Fetching contact with filters:', {
       startDate,
@@ -42,6 +44,7 @@ export class ContactController {
       page,
       limit,
       status,
+      service,
     });
 
     const options = {
@@ -49,8 +52,14 @@ export class ContactController {
       limit,
     };
 
-    // Pass the status parameter to findAll
-    return this.contactService.findAll(options, startDate, endDate, status);
+    // Pass all parameters including service to findAll
+    return this.contactService.findAll(
+      options,
+      startDate,
+      endDate,
+      status,
+      service
+    );
   }
 
   @Post()
@@ -97,5 +106,23 @@ export class ContactController {
     });
 
     return contact;
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  async delete(@Param('id') id: string, @Req() req) {
+    await this.contactService.delete(id);
+
+    await this.systemLogService.log({
+      type: SystemLogType.DeletedContact,
+      note: `User ${req.user.name} deleted a contact`,
+      status: Status.Success,
+      data: {
+        user: req.user,
+        blogId: id,
+      },
+    });
+
+    return { message: 'Contact deleted successfully' };
   }
 }

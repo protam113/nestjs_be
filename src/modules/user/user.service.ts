@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../../entities/user.entity';
-import { UserError } from './user.constant';
+import { UserError, UserSuccess } from './user.constant';
 import type { UserData, UserResponse } from './user.interface';
 import { Role } from '../../common/enums/role.enum';
 import { CreateManagerDto } from './dto/create-manager.dto';
@@ -10,15 +10,26 @@ import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
+import { UpdatePasswordDto } from './dto/update-password.dto';
+import { EmailPasswordService } from 'src/services/email_password.service';
+import { randomBytes } from 'crypto';
+import { VerificationCode } from './interfaces/verification-code.interface';
+import { EmailRegisterService } from 'src/services/email_register.service';
 
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
+  private verificationCodes: Map<
+    string,
+    VerificationCode & { newPassword: string }
+  > = new Map();
 
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-    private readonly redisCacheService: RedisCacheService
+    private readonly redisCacheService: RedisCacheService,
+    private readonly emailPasswordService: EmailPasswordService,
+    private readonly emailRegisterService: EmailRegisterService
   ) {}
 
   async getAllUsers(
@@ -77,7 +88,7 @@ export class UserService {
 
     const results = users.map((user) => ({
       status: 'success',
-      message: 'User retrieved successfully',
+      message: UserSuccess.UserRetrieved,
       user: {
         _id: user._id,
         name: user.name,
@@ -104,14 +115,7 @@ export class UserService {
     createManagerDto: CreateManagerDto,
     user: UserData
   ): Promise<UserResponse> {
-    const {
-      username,
-      password,
-      email,
-      phoneNumber,
-      name,
-      // Không cần lấy role từ DTO, sẽ set mặc định ở dưới
-    } = createManagerDto;
+    const { username, password, email, phoneNumber, name } = createManagerDto;
 
     // Check tồn tại user
     const existingUser = await this.userModel.findOne({ email, username });
@@ -125,15 +129,26 @@ export class UserService {
       email,
       phoneNumber,
       name,
-      role: Role.Manager, // Set cứng ở đây luôn
+      role: Role.Manager,
       user: {
         userId: user._id,
         username: user.username,
         role: user.role,
       },
     });
-
+    try {
+      await this.emailRegisterService.sendRegisterMail({
+        recipientEmail: email,
+        name,
+        username,
+        password,
+      });
+    } catch (error) {
+      this.logger.error('Failed to send registration email:', error);
+      // Continue with the response even if email fails
+    }
     const savedUser = await newUser.save();
+
     return this.mapToUserResponse(savedUser);
   }
 
@@ -141,7 +156,7 @@ export class UserService {
     const { _id, name, username, role, email, phoneNumber } = user;
     return {
       status: 'success',
-      message: 'User retrieved successfully',
+      message: UserSuccess.UserRetrieved,
       user: {
         _id,
         name,
@@ -235,9 +250,7 @@ export class UserService {
     }
 
     if (user.role !== Role.Manager) {
-      throw new BadRequestException(
-        'Only users with the Admin role can be deleted using this method.'
-      );
+      throw new BadRequestException(UserError.RoleError);
     }
 
     await this.userModel.findByIdAndDelete(userId);
@@ -248,5 +261,106 @@ export class UserService {
       status: 'success',
       message: 'Manager deleted successfully',
     };
+  }
+
+  async initiatePasswordChange(
+    userId: string,
+    dto: UpdatePasswordDto
+  ): Promise<{ status: string; message: string }> {
+    const user = await this.userModel.findById(userId);
+
+    if (!user) {
+      throw new BadRequestException(UserError.UserNotFound);
+    }
+
+    // Verify current password
+    const isValidPassword = await user.comparePassword(dto.currentPassword);
+    if (!isValidPassword) {
+      throw new BadRequestException(UserError.CurrentIncorrect);
+    }
+
+    // Verify new password matches confirmation
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException(UserError.PasswordNotMatch);
+    }
+
+    // Generate verification code
+    const verificationCode = randomBytes(3).toString('hex').toUpperCase();
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
+
+    // Store verification code with new password
+    this.verificationCodes.set(userId, {
+      code: verificationCode,
+      expiresAt,
+      newPassword: dto.newPassword,
+    });
+
+    // Send verification code via email
+    try {
+      await this.emailPasswordService.sendMail({
+        recipientEmail: user.email,
+        verificationCode,
+      });
+    } catch (error) {
+      this.logger.error('Failed to send verification code:', error);
+      throw new BadRequestException(UserError.FailedVerification);
+    }
+
+    return {
+      status: 'success',
+      message: UserSuccess.VerificationSent,
+    };
+  }
+
+  async verifyCodeAndUpdatePassword(
+    userId: string,
+    code: string
+  ): Promise<{ status: string; message: string }> {
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new BadRequestException(UserError.UserNotFound);
+    }
+
+    const storedVerification = this.verificationCodes.get(userId);
+
+    if (!storedVerification) {
+      throw new BadRequestException(UserError.NoVerificationCode);
+    }
+
+    if (new Date() > storedVerification.expiresAt) {
+      this.verificationCodes.delete(userId);
+      throw new BadRequestException(UserError.VerificationExpired);
+    }
+
+    if (storedVerification.code !== code.toUpperCase()) {
+      throw new BadRequestException(UserError.InvalidVerification);
+    }
+
+    // Get the stored password change request
+    const passwordChangeRequest = this.verificationCodes.get(userId);
+    if (!passwordChangeRequest) {
+      throw new BadRequestException(UserError.PasswordNotFound);
+    }
+
+    try {
+      // Update password
+      user.password = passwordChangeRequest.newPassword;
+      await user.save();
+
+      // Clear verification code
+      this.verificationCodes.delete(userId);
+
+      // Invalidate user cache
+      const cacheKey = buildCacheKey('user', { id: userId });
+      await this.redisCacheService.del(cacheKey).catch(() => null);
+
+      return {
+        status: 'success',
+        message: UserSuccess.PasswordUpdated,
+      };
+    } catch (error) {
+      this.logger.error('Failed to update password:', error);
+      throw new BadRequestException(UserError.FailedUpdatePassword);
+    }
   }
 }

@@ -1,8 +1,14 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
+import { Base } from './base.entity';
+import { COLLECTION_KEYS } from 'src/database/collections';
 
 @Schema()
-export class FaqEntity {
+export class FaqEntity extends Base {
+  @Prop({ type: String, default: uuidv4 })
+  _id: string;
+
   @Prop({ required: true, unique: true })
   question: string;
 
@@ -12,15 +18,10 @@ export class FaqEntity {
   @Prop({ type: Object })
   user: any;
 
-  @Prop({ default: Date.now })
-  createdAt: Date;
-
-  @Prop({ default: Date.now })
-  updatedAt: Date;
-
   @Prop({ default: 'show' })
   status: string;
 }
 
 export type FaqDocument = FaqEntity & Document;
 export const FaqSchema = SchemaFactory.createForClass(FaqEntity);
+FaqSchema.set('collection', COLLECTION_KEYS.FAQ);

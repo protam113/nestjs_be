@@ -31,6 +31,7 @@ import { BlogModule } from '../modules/blog/blog.module';
 import { ServiceModule } from '../modules/service/service.module';
 import { RedisCacheModule } from '../modules/cache/redis-cache.module';
 import { BackupModule } from '../modules/backup/backup.module';
+import { PricingModule } from '../modules/pricing/pricing.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { BackupModule } from '../modules/backup/backup.module';
     BlogModule,
     ServiceModule,
     ContactModule,
+    PricingModule,
   ],
   controllers: [AppBaseController],
   providers: [
@@ -89,7 +91,7 @@ export class AppModule implements NestModule {
 
     consumer.apply(RateLimitMiddleware).forRoutes('*');
 
-    consumer.apply(ChecksumMiddleware).forRoutes('public/auth/login');
+    // consumer.apply(ChecksumMiddleware).forRoutes('public/auth/login');
 
     // JWT Cookie middleware
     consumer
@@ -109,6 +111,10 @@ export class AppModule implements NestModule {
           method: RequestMethod.GET,
         },
         {
+          path: '/category/:slug',
+          method: RequestMethod.GET,
+        },
+        {
           path: '/blog',
           method: RequestMethod.GET,
         },
@@ -118,6 +124,14 @@ export class AppModule implements NestModule {
         },
         {
           path: '/faqs',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/pricing',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/pricing/:slug',
           method: RequestMethod.GET,
         },
         {

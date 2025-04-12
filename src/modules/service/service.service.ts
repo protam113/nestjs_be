@@ -148,6 +148,15 @@ export class ServiceService {
     return result;
   }
 
+  async validateService(serviceId: string): Promise<boolean> {
+    try {
+      const service = await this.serviceModel.findById(serviceId).exec();
+      return !!service; // Returns true if service exists, false otherwise
+    } catch (error) {
+      this.logger.error(`Error validating service: ${error.message}`);
+      return false;
+    }
+  }
   private mapToDataResponse(service: any): DataResponse {
     return {
       status: 'success',

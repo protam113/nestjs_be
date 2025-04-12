@@ -6,15 +6,16 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { FaqDocument, CreateFaqDto, UpdateFaqDto } from './faq.interface';
 import { UserData } from '../user/user.interface';
 import { DataResponse } from './responses/data.response';
-import { FaqEntity } from '../../entities/faq.entity';
+import { FaqEntity, FaqDocument } from '../../entities/faq.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { Error } from './faq.constant';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
+import { UpdateFaqDto } from './dto/update_faq.dto';
+import { CreateFaqDto } from './dto/create_faq.dto';
 
 @Injectable()
 export class FaqService {
@@ -31,7 +32,7 @@ export class FaqService {
     user: UserData
   ): Promise<FaqDocument> {
     if (!createFaqDto || !createFaqDto.question || !createFaqDto.answer) {
-      throw new BadRequestException('Question and answer are required');
+      throw new BadRequestException(Error.QuestionRequired);
     }
 
     const normalizedQuestion = createFaqDto.question.trim();
@@ -143,7 +144,7 @@ export class FaqService {
   async findOne(id: string): Promise<FaqDocument> {
     const faq = await this.faqModel.findById(id).lean().exec();
     if (!faq) {
-      throw new NotFoundException('FAQ not found');
+      throw new NotFoundException(Error.NotFound);
     }
     return faq;
   }
@@ -155,7 +156,7 @@ export class FaqService {
   ): Promise<FaqDocument> {
     const faq = await this.faqModel.findById(id);
     if (!faq) {
-      throw new NotFoundException('FAQ not found');
+      throw new NotFoundException(Error.NotFound);
     }
 
     // Include user information in the update
@@ -180,7 +181,7 @@ export class FaqService {
   async delete(id: string): Promise<void> {
     const result = await this.faqModel.findByIdAndDelete(id);
     if (!result) {
-      throw new NotFoundException('FAQ not found');
+      throw new NotFoundException(Error.NotFound);
     }
   }
 }

@@ -3,7 +3,7 @@ import { Strategy, ExtractJwt } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Request as RequestType } from 'express';
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config'; // Import ConfigService
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -16,7 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'), // Lấy từ ConfigService
+      secretOrKey: configService.get<string>('JWT_SECRET'),
     });
   }
 
@@ -29,9 +29,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    this.logger.log('JWT Payload:', payload); // Log payload để kiểm tra
+    this.logger.log('JWT Payload:', payload);
 
-    // Thêm thông tin vào request.user
     return {
       userId: payload._id,
       role: payload.role,

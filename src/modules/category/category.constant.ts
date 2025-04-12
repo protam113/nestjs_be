@@ -3,6 +3,8 @@ export const INITIAL_COUNT_OF_EACH_STATUS = 0;
 export enum Error {
   ThisCategoryAlreadyExists = 'This category already exists',
   CategoryNotFound = 'Category not found',
+  CategoryRequired = 'Category name is required',
+  InternalServer = 'Internal server error',
 }
 
 export enum Success {

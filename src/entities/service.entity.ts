@@ -2,6 +2,7 @@ import { Base } from './base.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { Schema, Prop, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { COLLECTION_KEYS } from 'src/database/collections';
 
 @Schema()
 export class ServiceEntity extends Base {
@@ -37,3 +38,4 @@ export class ServiceEntity extends Base {
 }
 export type ServiceDocument = ServiceEntity & Document;
 export const ServiceSchema = SchemaFactory.createForClass(ServiceEntity);
+ServiceSchema.set('collection', COLLECTION_KEYS.SERVICE);

@@ -1,7 +1,8 @@
 import { Base } from './base.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { Schema, Prop, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { CategoryEntity } from './category.entity';
+import { COLLECTION_KEYS } from 'src/database/collections';
 
 @Schema()
 export class BlogEntity extends Base {
@@ -32,8 +33,12 @@ export class BlogEntity extends Base {
   @Prop({ type: Object })
   user: any;
 
-  @Prop({ type: Object })
-  category: any;
+  @Prop({
+    type: [{ type: String, ref: CategoryEntity.name }],
+    default: [],
+  })
+  category: string[];
 }
 export type BlogDocument = BlogEntity & Document;
 export const BlogSchema = SchemaFactory.createForClass(BlogEntity);
+BlogSchema.set('collection', COLLECTION_KEYS.BLOG);

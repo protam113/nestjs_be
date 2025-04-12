@@ -5,6 +5,7 @@ import { Document } from 'mongoose';
 import { BCRYPT_SALT_ROUNDS } from '../app/app.constant';
 import { Base } from './base.entity';
 import { Role } from '../common/enums/role.enum';
+import { COLLECTION_KEYS } from 'src/database/collections';
 
 // Định nghĩa lớp User
 @Schema()
@@ -33,6 +34,7 @@ export class User extends Base {
 
 // Tạo UserSchema từ User class
 export const UserSchema = SchemaFactory.createForClass(User);
+UserSchema.set('collection', COLLECTION_KEYS.USER);
 
 // Hash mật khẩu trước khi save
 UserSchema.pre<User & Document>('save', async function (next) {

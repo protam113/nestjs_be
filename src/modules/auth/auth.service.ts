@@ -1,33 +1,79 @@
-import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { ConfigService } from '@nestjs/config';
 
+// Entity
 import { User, UserDocument } from '../../entities/user.entity';
+
+// Components
 import { LogInDTO } from './dtos/log-in.dto';
 import { LogInResponse } from './responses/log-in.response';
 import { AuthError, AuthSuccess } from './auth.constant';
-import { ConfigService } from '@nestjs/config';
 import { Role } from '../../common/enums/role.enum';
-import { RedisCacheService } from '../cache/redis-cache.service';
-import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
+
+/**
+ * =============================
+ * 📌 Auth Service Implementation
+ * =============================
+ *
+ * @description Service layer for handling authentication logic
+ * including admin initialization, login, and role validation.
+ *
+ * @class AuthService
+ * @injectable
+ *
+ * @implements OnModuleInit
+ *
+ * @dependencies
+ * - UserModel (MongoDB model via Mongoose)
+ * - ConfigService (for accessing environment variables)
+ */
 export class AuthService implements OnModuleInit {
+  /**
+   * @property logger
+   * Logger instance for logging important lifecycle and auth events
+   */
+  private readonly logger = new Logger(AuthService.name);
+
+  /**
+   * @constructor
+   * @param userModel - Mongoose model injected for User collection
+   * @param configService - NestJS ConfigService to access .env variables
+   */
+
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly configService: ConfigService
   ) {}
 
+  /**
+   * @lifecycle OnModuleInit
+   * Automatically invoked by NestJS after dependency injection
+   * Used here to initialize default admin account
+   */
   async onModuleInit() {
     await this.createAdminAccount();
   }
 
+  /**
+   * ============================
+   * 🔐 Private Method: createAdminAccount
+   * ============================
+   *
+   * @description Creates default admin user if not present in DB
+   */
+
   private async createAdminAccount() {
     const adminUsername = this.configService.get<string>('ADMIN_USERNAME');
-    console.log(
-      `Attempting to create admin account with username: ${adminUsername}`
-    );
 
     try {
       const existingAdmin = await this.userModel.findOne(
@@ -36,12 +82,11 @@ export class AuthService implements OnModuleInit {
       );
 
       if (existingAdmin?._id) {
-        console.log(`Valid admin account exists with ID: ${existingAdmin._id}`);
         return;
       }
 
       if (existingAdmin) {
-        console.warn('Found admin account with null ID, removing...');
+        this.logger.warn('Found admin account with null ID, removing...');
         await this.userModel.deleteOne({ username: adminUsername });
       }
 
@@ -55,16 +100,28 @@ export class AuthService implements OnModuleInit {
       });
 
       const savedAdmin = await admin.save();
-      console.log(`Admin created successfully with ID: ${savedAdmin._id}`);
+      this.logger.log(
+        `[SUCCESS]  Admin created successfully with ID: ${savedAdmin._id}`
+      );
     } catch (error) {
-      console.error('Admin account creation failed:', error);
+      this.logger.error('Admin account creation failed:', error);
       throw error;
     }
   }
 
+  /**
+   * =============================
+   * ✅ Public Method: validateAttemptAndSignToken
+   * =============================
+   *
+   * @param dto LogInDTO
+   * @returns LogInResponse
+   *
+   * @description Validates login credentials, user role, and returns login result
+   */
   async validateAttemptAndSignToken(dto: LogInDTO): Promise<LogInResponse> {
     if (!dto.password || typeof dto.password !== 'string') {
-      throw new BadRequestException('Password is required');
+      throw new BadRequestException(AuthError.PasswordRequired);
     }
 
     const user = (await this.userModel.findOne({
@@ -82,9 +139,7 @@ export class AuthService implements OnModuleInit {
     }
 
     if (![Role.Admin, Role.Manager].includes(user.role)) {
-      throw new BadRequestException(
-        'Access restricted to admin and manager users only'
-      );
+      throw new BadRequestException(AuthError.AccessDenied);
     }
 
     return {
@@ -98,10 +153,20 @@ export class AuthService implements OnModuleInit {
     };
   }
 
+  /**
+   * ============================
+   * 🔎 Public Method: validateUserAndGetRole
+   * ============================
+   *
+   * @param _id - User ID
+   * @returns role - User's role as string
+   *
+   * @description Verifies user existence and extracts their role
+   */
   async validateUserAndGetRole(_id: string): Promise<string> {
     const user = await this.userModel.findById(_id);
     if (!user?.role) {
-      throw new BadRequestException('User role not found');
+      throw new BadRequestException(AuthError.UserRole);
     }
     return user.role;
   }

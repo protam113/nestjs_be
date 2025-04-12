@@ -18,17 +18,6 @@ export class BackupService {
     );
   }
 
-  // // You can also add a test backup method
-  // @Cron(CronExpression.EVERY_MINUTE) // Runs every minute for testing
-  // async handleTestBackup() {
-  //   try {
-  //     await this.handleDailyBackup();
-  //     this.logger.log('Test backup completed successfully');
-  //   } catch (error) {
-  //     this.logger.error('Test backup failed:', error);
-  //   }
-  // }
-
   // Change from EVERY_DAY_AT_MIDNIGHT to a specific time
   @Cron('0 0 0 * * *') // Runs at 00:00:00 (midnight) every day
   async handleDailyBackup() {

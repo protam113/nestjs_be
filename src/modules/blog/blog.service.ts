@@ -1,25 +1,51 @@
-import { SlugProvider } from '../slug/slug.provider';
-import { InjectModel } from '@nestjs/mongoose';
 import {
   BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Model } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+// Pagination
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
-import { UserData } from '../user/user.interface';
-import { CreateBlogDto } from './dto/create-blog.dto';
-import { BlogDocument, BlogEntity } from '../../entities/blog.entity';
-import { DataResponse } from './responses/data.response';
-import { CategoryService } from '../category/category.service';
-import { Error } from './blog.constant';
-import { BlogStatus } from './blog.constant';
+
+// Cache
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 
+// UserData
+import { UserData } from '../user/user.interface';
+
+// Entity
+import { BlogDocument, BlogEntity } from '../../entities/blog.entity';
+
+// Components
+import { SlugProvider } from '../slug/slug.provider';
+import { CategoryService } from '../category/category.service';
+import { CreateBlogDto } from './dto/create-blog.dto';
+import { DataResponse } from './responses/data.response';
+import { Error } from './blog.constant';
+import { BlogStatus } from './blog.constant';
+
 @Injectable()
+
+/**
+ * ==========================
+ * 📌 Blog Service Definition
+ * ==========================
+ *
+ * @description Service layer for managing blog operations with caching support
+ *
+ * @class BlogService
+ * @injectable
+ *
+ * @dependencies
+ * - BlogModel (MongoDB model)
+ * - SlugProvider (For URL-friendly slug generation)
+ * - CategoryService (For category validation)
+ * - RedisCacheService (For caching responses)
+ */
 export class BlogService {
   private readonly logger = new Logger(BlogService.name);
 
@@ -30,6 +56,32 @@ export class BlogService {
     private readonly categoryService: CategoryService,
     private readonly redisCacheService: RedisCacheService
   ) {}
+
+  /**
+   * @methods
+   */
+
+  /**
+   * @GET /blogs
+   * @summary Retrieves a paginated list of blog posts with optional filters
+   *
+   * @param {PaginationOptionsInterface} options - Pagination settings (page, limit)
+   * @param {string} [startDate] - Optional filter: start of creation date range
+   * @param {string} [endDate] - Optional filter: end of creation date range
+   * @param {BlogStatus} [status] - Optional filter by blog status
+   * @param {string} [category] - Optional filter by category ID
+   *
+   * @returns {Promise<Pagination<DataResponse>>} - Paginated list of blogs
+   *
+   * @throws {InternalServerErrorException} - If database query fails
+   *
+   * @cache TTL: 1 hour (3600 seconds)
+   *
+   * @sideEffect - Uses and writes to Redis cache
+   *
+   * @example
+   * await blogService.findAll({ page: 1, limit: 10 }, '2024-01-01', '2024-12-31', 'SHOW', 'tech');
+   */
 
   async findAll(
     options: PaginationOptionsInterface,
@@ -46,25 +98,35 @@ export class BlogService {
       status: status || 'all',
       category: category || 'all',
     });
+
     const cached =
       await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
-
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
       return cached;
     }
 
     const filter: Record<string, any> = {};
+
     if (startDate && endDate)
       filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
+
     if (status && Object.values(BlogStatus).includes(status))
       filter.status = status;
-    if (category) filter.category = category;
+
+    if (category) {
+      try {
+        // ép về objectId để so sánh chính xác
+        filter.category = new Types.ObjectId(category);
+      } catch (e) {
+        throw new BadRequestException(Error.InvalidCategoryId);
+      }
+    }
 
     const [blogs, total] = await Promise.all([
       this.blogModel
         .find(filter)
-        .populate('category', 'name')
+        .populate('category', 'name') // populate đầy đủ object category
         .skip((options.page - 1) * options.limit)
         .limit(options.limit)
         .lean(),
@@ -84,6 +146,27 @@ export class BlogService {
     return result;
   }
 
+  /**
+   * @POST /blogs
+   * @summary Creates a new blog post
+   *
+   * @param {CreateBlogDto} createBlogDto - Data used to create the blog
+   * @param {UserData} user - The user who is creating the blog
+   * @returns {Promise<BlogDocument>} - The created blog document
+   *
+   * @throws {BadRequestException} - If a blog with the same title or slug already exists
+   * @throws {BadRequestException} - If any provided category ID is invalid
+   *
+   * @sideEffect - Generates a unique slug for the blog, validates categories
+   *
+   * @example
+   * await blogService.create({
+   *   title: 'My Blog',
+   *   content: 'Hello world!',
+   *   category: ['tech']
+   * }, currentUser);
+   */
+
   async create(
     createBlogDto: CreateBlogDto,
     user: UserData
@@ -94,12 +177,17 @@ export class BlogService {
     const blogExists = await this.blogModel.findOne({
       $or: [{ title }, { slug }],
     });
-    if (blogExists) throw new BadRequestException(Error.ThisBlogAlreadyExists);
+    if (blogExists) {
+      throw new BadRequestException(Error.ThisBlogAlreadyExists);
+    }
 
-    if (category) {
+    let categoryIds: string[] = [];
+    if (category?.length) {
       const valid = await this.categoryService.validateCategories(category);
-      if (!valid)
-        throw new BadRequestException('Invalid category IDs provided');
+      if (!valid) {
+        throw new BadRequestException(Error.InvalidCategoryUUIDs);
+      }
+      categoryIds = category; // ⚠️ giữ nguyên string UUID
     }
 
     const newBlog = new this.blogModel({
@@ -107,7 +195,7 @@ export class BlogService {
       slug,
       content,
       description,
-      category,
+      category: categoryIds, // string UUIDs
       status: BlogStatus.Show,
       user: {
         userId: user._id,
@@ -116,13 +204,47 @@ export class BlogService {
       },
     });
 
+    await this.redisCacheService.reset();
     return await newBlog.save();
   }
 
+  /**
+   * @DELETE /blogs/:id
+   * @summary Deletes a blog post by its ID
+   *
+   * @param {string} id - The ID of the blog post to delete
+   * @returns {Promise<void>} - Resolves if deletion is successful
+   *
+   * @throws {NotFoundException} - If no blog post is found with the given ID
+   *
+   * @sideEffect - Clears the blog cache after deletion
+   *
+   * @example
+   * await blogService.delete('660123abc...');
+   */
+
   async delete(id: string): Promise<void> {
     const result = await this.blogModel.findByIdAndDelete(id);
-    if (!result) throw new NotFoundException('Blog not found');
+    await this.redisCacheService.reset();
+    if (!result) throw new NotFoundException(Error.BlogNotFound);
   }
+
+  /**
+   * @GET /blogs/:slug
+   * @summary Retrieves a single blog post by its slug
+   *
+   * @param {string} slug - The URL-friendly identifier (slug) of the blog
+   * @returns {Promise<DataResponse>} - The blog data wrapped in a standard response format
+   *
+   * @throws {NotFoundException} - If no blog post is found with the given slug
+   *
+   * @cache TTL: 1 hour (3600 seconds)
+   *
+   * @sideEffect - Logs cache status and sets cache if not found
+   *
+   * @example
+   * const blog = await blogService.findBySlug('how-to-code-clean');
+   */
 
   async findBySlug(slug: string): Promise<DataResponse> {
     const cacheKey = `blog_${slug}`;
@@ -148,21 +270,28 @@ export class BlogService {
     return result;
   }
 
+  /**
+   * @private
+   * @summary Maps a blog document to a standardized response DTO
+   *
+   * @param {any} blog - The raw blog document (from database)
+   * @returns {DataResponse} - The transformed blog data for client consumption
+   *
+   * @note This is an internal helper, used to abstract away database structure
+   */
+
   private mapToDataResponse(blog: any): DataResponse {
     return {
-      status: 'success',
-      result: {
-        _id: blog._id,
-        title: blog.title,
-        slug: blog.slug,
-        content: blog.content,
-        description: blog.description,
-        link: blog.link,
-        category: blog.category,
-        status: blog.status,
-        createdAt: blog.createdAt ?? new Date(),
-        updatedAt: blog.updatedAt ?? new Date(),
-      },
+      _id: blog._id,
+      title: blog.title,
+      slug: blog.slug,
+      content: blog.content,
+      description: blog.description,
+      link: blog.link,
+      category: blog.category,
+      status: blog.status,
+      createdAt: blog.createdAt ?? new Date(),
+      updatedAt: blog.updatedAt ?? new Date(),
     };
   }
 }
