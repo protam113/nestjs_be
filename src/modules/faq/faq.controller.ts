@@ -12,10 +12,12 @@ import {
   Req,
 } from '@nestjs/common';
 import { FaqService } from './faq.service';
-import { CreateFaqDto, UpdateFaqDto, FaqFilterQuery } from './faq.interface';
+import { FaqFilterQuery } from './faq.interface';
 import { SystemLogService } from '../system-log/system-log.service';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
+import { CreateFaqDto } from './dto/create_faq.dto';
+import { UpdateFaqDto } from './dto/update_faq.dto';
 
 @Controller('faqs')
 export class FaqController {

@@ -9,7 +9,6 @@ import { CreateManagerDto } from './dto/create-manager.dto';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { Pagination } from '../paginate/pagination';
-import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { EmailPasswordService } from 'src/services/email_password.service';
 import { randomBytes } from 'crypto';

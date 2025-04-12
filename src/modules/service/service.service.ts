@@ -121,6 +121,7 @@ export class ServiceService {
 
   async delete(id: string): Promise<void> {
     const result = await this.serviceModel.findByIdAndDelete(id);
+    await this.redisCacheService.reset();
     if (!result) {
       throw new NotFoundException(Error.ServiceNotFound);
     }

@@ -6,6 +6,8 @@ import { User, UserSchema } from '../../entities/user.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SystemLogModule } from '../system-log/system-log.module';
 import { RedisCacheModule } from '../cache/redis-cache.module';
+
+// Email Service
 import { EmailPasswordModule } from 'src/common/email/password_email.module';
 import { EmailPasswordService } from 'src/services/email_password.service';
 import { EmailRegisterModule } from 'src/common/email/register_email.module';

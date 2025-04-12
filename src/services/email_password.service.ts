@@ -45,44 +45,198 @@ export class EmailPasswordService {
       to: recipientEmail,
       subject: 'Password Change Verification Code',
       html: `
- <div style="max-width: 600px; margin: auto; font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; border-radius: 10px;">
-    <div style="background:#53bc26; padding: 20px; text-align: center; border-top-left-radius: 10px; border-top-right-radius: 10px;">
-        <h2 style="color: white; margin: 0;">Hust4L - Password Changed</h2>
-    </div>
-
-    <div style="background: white; padding: 20px; border-radius: 0 0 10px 10px;">
-
-        <p>Your password has been successfully changed.</p>
-
-        <p>If you did not make this change, please contact our support team immediately. To verify your identity and confirm the password change, please enter the verification code below:</p>
-
-        <!-- Mã code hiển thị -->
-        <div style="background: #f1f1f1; padding: 15px; border-radius: 5px; margin-top: 20px; font-family: 'Courier New', Courier, monospace; color: #333; border: 1px solid #ddd;">
-            <strong style="color: #53bc26;">Your Change Verification Code:</strong>
-            <p style="font-size: 18px; font-weight: bold; color: #333;">${verificationCode}</p>
+ <!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f8f8f8;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #53bc26 0%, #3da015 100%);
+            padding: 25px;
+            text-align: center;
+        }
+        .header h2 {
+            color: white;
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 0.5px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .content {
+            padding: 30px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .verification-box {
+            background: #f5f5f5;
+            border-left: 4px solid #53bc26;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 25px 0;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .verification-label {
+            color: #53bc26;
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .verification-code {
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            font-weight: bold;
+            color: #013162;
+            letter-spacing: 2px;
+            background: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            display: inline-block;
+            border: 1px dashed #cccccc;
+        }
+        .warning {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .time-warning {
+            background-color: #fff8e8;
+            border-left: 4px solid #e74c3c;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        .footer {
+            background: linear-gradient(135deg, #53bc26 0%, #3da015 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 0 0 12px 12px;
+        }
+        .footer-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .footer-table td {
+            padding: 10px;
+            vertical-align: middle;
+        }
+        .logo {
+            height: 60px;
+            border-radius: 6px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        .company-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .company-tagline {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+        .contact-info {
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .contact-link {
+            color: #4da6ff;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .contact-link:hover {
+            color: #7bbefd;
+        }
+        .team-signature {
+            color: rgb(43, 129, 7);
+            font-weight: bold;
+            margin: 20px 0 5px 0;
+        }
+        .info-icon {
+            font-size: 16px;
+            margin-right: 5px;
+        }
+        .support-button {
+            display: inline-block;
+            background: #013162;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 15px 0;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .support-button:hover {
+            background: #014a94;
+            box-shadow: 0 4px 8px rgba(1, 49, 98, 0.3);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Hust4L - Password Changed</h2>
         </div>
-
-        <p><strong style="color: red;">Note:</strong> This code will expire in 3 minutes. Please use it promptly.</p>
-
-        <p>Best regards,</p>
-        <p><span style="color:rgb(43, 129, 7); font-weight: bold;">VietStrix Team</span></p>
-
-        <table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; background: #013162; color: white; padding: 15px; border-radius: 5px;">
-            <tr>
-                <td style="padding: 15px; text-align: left; vertical-align: middle;">
-                    <img src="https://lh3.googleusercontent.com/a-/ALV-UjWHPYbMFT4opU9pYn0ItPXhgruFrO7OB2MgNkhOs0lGBf48Zg0=s80-p-k-rw-no" alt="VietStrix Logo" style="height: 60px; border-radius: 5px;">
-                </td>
-                <td style="padding: 15px; text-align: right; vertical-align: middle;">
-                    <strong style="font-size: 18px;">Hust4L</strong><br/>
-                    <span style="font-size: 14px;">Agency | Marketing </span><br/>
-                    📧 <a href="mailto:vietstrix@gmail.com" style="color: #4da6ff; text-decoration: none;">vietstrix@gmail.com</a><br/>
-                    🌐 <a href="https://hust4l.com" style="color: #4da6ff; text-decoration: none;">vietstrix.com</a><br/>
-                    📞 +84 123 456 789
-                </td>
-            </tr>
-        </table>
+        
+        <div class="content">
+            <p>Dear User,</p>
+            
+            <p>Your password has been successfully changed.</p>
+            
+            <p>If you did not make this change, please contact our support team immediately. To verify your identity and confirm the password change, please enter the verification code below:</p>
+            
+            <div class="verification-box">
+                <div class="verification-label">Your Change Verification Code:</div>
+                <div class="verification-code">${verificationCode}</div>
+            </div>
+            
+            <div class="time-warning">
+                <span class="warning">Note:</span> This code will expire in 3 minutes. Please use it promptly.
+            </div>
+            
+            <a href="https://hust4l.com/support" class="support-button">Contact Support</a>
+            
+            <p>Best regards,</p>
+            <p class="team-signature">VietStrix Team</p>
+        </div>
+        
+        <div class="footer">
+            <table class="footer-table">
+                <tr>
+                    <td style="width: 30%; text-align: left;">
+                        <img src="/api/placeholder/120/80" alt="VietStrix Logo" class="logo">
+                    </td>
+                    <td style="width: 70%; text-align: right;">
+                        <div class="company-name">Hust4L</div>
+                        <div class="company-tagline">Agency | Marketing</div>
+                        <div class="contact-info">
+                            <span class="info-icon">📧</span> <a href="mailto:vietstrix@gmail.com" class="contact-link">vietstrix@gmail.com</a><br>
+                            <span class="info-icon">🌐</span> <a href="https://hust4l.com" class="contact-link">vietstrix.com</a><br>
+                            <span class="info-icon">📞</span> +84 123 456 789
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </div>
     </div>
-</div>
+</body>
+</html>
      `,
     };
 

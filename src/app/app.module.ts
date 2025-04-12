@@ -32,6 +32,7 @@ import { ServiceModule } from '../modules/service/service.module';
 import { RedisCacheModule } from '../modules/cache/redis-cache.module';
 import { BackupModule } from '../modules/backup/backup.module';
 import { PricingModule } from '../modules/pricing/pricing.module';
+import { SeoModule } from 'src/modules/seo/seo.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { PricingModule } from '../modules/pricing/pricing.module';
     }),
     DatabaseModule,
     RedisCacheModule,
+    SeoModule,
     AuthModule,
     ScheduleModule.forRoot(),
     BackupModule,

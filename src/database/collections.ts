@@ -10,4 +10,5 @@ export const COLLECTION_KEYS = {
   CONTACT: process.env.CONTACT_COLLECTION || 'contacts',
   SYSTEMLOGS: process.env.SYSTEMLOGS_COLLECTION || 'system_logs',
   PRICING: process.env.PRICING_COLLECTION || 'pricings',
+  SEO: process.env.SEO_COLLECTION || 'seos',
 };
