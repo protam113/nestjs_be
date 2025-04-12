@@ -27,12 +27,6 @@ export class BackupController {
     return { message: 'Backup created successfully', path: backupPath };
   }
 
-  @Get('list')
-  getBackups() {
-    const backups = this.backupService.getBackupsList();
-    return { backups };
-  }
-
   @Post('restore')
   async restoreBackup(@Body('path') backupPath: string) {
     await this.backupService.restoreBackup(backupPath);

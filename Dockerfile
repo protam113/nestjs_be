@@ -1,38 +1,49 @@
 # Build Stage
-FROM node:20.10.0-alpine AS builder
+FROM node:20.11.1-alpine AS builder
 
+# Set working directory
 WORKDIR /app
 
+# Install dependencies first to leverage Docker cache
 COPY package*.json ./
 RUN yarn install
 
+# Copy the rest of the application code
 COPY . .
+
+# Build the application for production
 RUN yarn build
 
 # Production Stage
-FROM node:20.10.0-alpine
+FROM node:20.11.1-alpine
 
+# Install mongodb-tools
+RUN apk add --no-cache mongodb-tools
+
+# Set working directory
 WORKDIR /app
 
-# Install production dependencies
+# Install only production dependencies
 COPY package*.json ./
 RUN yarn install --production
 
-# Create necessary directories
+# Create necessary directories and set permissions
 RUN mkdir -p logs backup && \
     chown -R node:node /app
 
-# Copy built assets from builder
+# Copy built files and node_modules from the builder stage
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=8080
 
-# Switch to non-root user
+
+# Switch to non-root user for security
 USER node
 
-EXPOSE 8080
+# Expose the port the app will run on
+EXPOSE ${PORT}
 
-CMD ["node", "dist/main"]
+# Command to run the application in production mode
+CMD ["yarn", "start:prod"]

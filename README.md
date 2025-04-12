@@ -1,7 +1,11 @@
-
 <div align="center">
 
 # HUST4L Backend Service
+
+## Project Overview
+
+HUST4L Backend Service is designed to provide a scalable and secure backend system for managing content and users, specifically tailored for modern web applications. The service is built with NestJS, leveraging MongoDB for data storage and Redis for caching to ensure high performance and reliability.
+
 
 A NestJS-based backend service providing REST APIs for content management and user authentication.
 
@@ -14,7 +18,7 @@ A NestJS-based backend service providing REST APIs for content management and us
 ## Features
 
 - User Authentication & Authorization
-- Content Management (Blogs, FAQs, Services, Categories)
+- Content Management (Blogs, FAQs, Services, Categories , Seo , Pricings, Contact)
 - Redis Caching
 - System Logging
 - MongoDB Integration
@@ -48,32 +52,32 @@ src/
 
 ## Prerequisites
 
-- Node.js (v14+)
+- Node.js (v16+)
 - MongoDB
 - Redis
 - Windows/Linux/MacOS
 
 ## Environment Variables
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory and set the following variables:
 
 ```env
-# App
-PORT=8080
-NODE_ENV=development
+# App settings
+PORT=8080                # The port where the app will run
+NODE_ENV=development     # Set the environment to development, production, etc.
 
-# Database
-MONGODB_URI=mongodb://localhost:27017/hust4l
+# Database settings
+MONGODB_URI=mongodb://localhost:27017/hust4l  # MongoDB connection URI
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
+# Redis settings
+REDIS_HOST=localhost     # The address of the Redis server
+REDIS_PORT=6379          # The port of the Redis server
+REDIS_PASSWORD=          # Redis password, if applicable
 
-# Security
-JWT_SECRET=your_jwt_secret
-API_KEY=your_api_key
-ALLOWED_ORIGINS=http://localhost:3000
+# Security settings
+JWT_SECRET=your_jwt_secret  # Secret key used for generating JWT tokens
+API_KEY=your_api_key       # API key for secure access to the API
+ALLOWED_ORIGINS=http://localhost:3000  # Allowed origins for CORS
 ```
 
 ## Installation
@@ -97,25 +101,9 @@ nest build
 
 ## API Documentation
 
-### Authentication
-- POST `/public/auth/login` - User login
-- POST `/public/auth/logout` - User logout
+You can find the full API documentation [here](docs/HUST4L_API_Documentation.md).
 
-### Users
-- GET `/users/me` - Get current user
-- GET `/users` - Get all users (Admin)
-- POST `/users/manager` - Create manager (Admin)
-- DELETE `/users/manager/:id` - Delete manager (Admin)
 
-### Categories
-- GET `/category` - Get all categories
-- POST `/category` - Create category (Auth)
-- PATCH `/category/:id` - Update category (Auth)
-- GET `/category/:slug` - Get category by slug
-
-### System Logs
-- GET `/logs` - Get system logs (Admin)
-- GET `/logs/latest-user-statistic` - Get latest user statistics
 
 ## Security Features
 
@@ -128,14 +116,20 @@ nest build
 ## Caching
 
 The application uses Redis for caching with a default TTL of 24 hours. Cache keys are automatically managed for:
+
 - Categories
 - Blogs
 - Services
+- FAQs
+- Seo
+- Pricings
+- Contact
 - User data
 
 ## Error Handling
 
 Standard HTTP status codes are used:
+
 - 200: Success
 - 201: Created
 - 400: Bad Request
@@ -148,11 +142,32 @@ Standard HTTP status codes are used:
 ## Monitoring
 
 Health checks are available at:
+
 - GET `/health` - System health status
 
 ## License
 
 [MIT Licensed](LICENSE)
-```
 
-This README provides a comprehensive overview of your project's structure, setup instructions, and features. Let me know if you'd like me to expand on any section!
+
+---
+
+### 5. **Thêm phần về **Contributing** (Đóng góp vào dự án)**
+Một phần hướng dẫn về cách đóng góp vào dự án sẽ rất hữu ích, nhất là khi bạn muốn mời người khác tham gia vào dự án của mình. Bạn có thể sử dụng mẫu sau:
+
+```markdown
+## Contributing
+
+We welcome contributions! To contribute to this project, please fork the repository and create a pull request with your changes.
+
+### How to contribute:
+
+1. Fork the repository.
+2. Create a new branch for your feature or bug fix (`git checkout -b feature-name`).
+3. Commit your changes (`git commit -am 'Add feature'`).
+4. Push your changes to your fork (`git push origin feature-name`).
+5. Create a pull request.
+
+### Reporting Issues
+
+If you encounter any issues, feel free to open a new issue in the repository. Provide as much information as possible, including steps to reproduce and error messages.

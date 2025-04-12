@@ -1,66 +1,27 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { DatabaseBackup } from '../../utils/backup.util';
-import * as fs from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import * as path from 'path';
+import * as fs from 'fs';
+import { ConfigService } from '@nestjs/config';
 
-@Injectable()
+const execAsync = promisify(exec);
+
 export class BackupService {
-  private readonly logger = new Logger(BackupService.name);
-  private readonly databaseBackup: DatabaseBackup;
+  constructor(private configService: ConfigService) {}
 
-  constructor(private configService: ConfigService) {
-    this.databaseBackup = new DatabaseBackup();
-    // Create initial backup when service starts
-    this.handleDailyBackup().catch((err) =>
-      this.logger.error('Initial backup failed:', err)
-    );
-  }
-
-  // Change from EVERY_DAY_AT_MIDNIGHT to a specific time
-  @Cron('0 0 0 * * *') // Runs at 00:00:00 (midnight) every day
-  async handleDailyBackup() {
-    try {
-      const dbUri = this.configService.get<string>('DATABASE_URL');
-      const dbName = this.configService.get<string>('DB_NAME');
-
-      if (!dbUri || !dbName) {
-        throw new Error('Database configuration is missing');
-      }
-
-      const finalPath = await this.databaseBackup.createBackup(dbName, dbUri);
-      this.logger.log(`Database backup saved to: ${finalPath}`);
-
-      // Clean up old backups (keep last 7 days)
-      await this.cleanupOldBackups();
-
-      // Reset any backup-related states or counters here
-      this.logger.log(
-        `Daily backup completed and reset at ${new Date().toISOString()}`
-      );
-
-      return finalPath;
-    } catch (error) {
-      this.logger.error('Database backup failed:', error);
-      throw error;
-    }
-  }
-
-  private async cleanupOldBackups() {
+  async getBackupsList(): Promise<string[]> {
     const backupDir = path.join(process.cwd(), 'backup');
-    if (!fs.existsSync(backupDir)) return;
 
-    const files = fs.readdirSync(backupDir);
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.setDate(now.getDate() - 7));
+    if (!fs.existsSync(backupDir)) {
+      return [];
+    }
 
-    for (const file of files) {
-      const filePath = path.join(backupDir, file);
-      const stats = fs.statSync(filePath);
-      if (stats.mtime < sevenDaysAgo) {
-        fs.unlinkSync(filePath);
-      }
+    try {
+      const files = fs.readdirSync(backupDir);
+      return files.filter((file) => file.endsWith('.gz'));
+    } catch (error) {
+      console.error(`Failed to get backups list: ${error.message}`);
+      throw new Error(`Failed to get backups list: ${error.message}`);
     }
   }
 
@@ -72,16 +33,23 @@ export class BackupService {
       throw new Error('Database configuration is missing');
     }
 
-    // Direct use of the backup path without copying
-    return await this.databaseBackup.createBackup(dbName, dbUri);
-  }
-
-  getBackupsList(): string[] {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupDir = path.join(process.cwd(), 'backup');
+    const backupFileName = `${dbName}-${timestamp}.gz`;
+    const backupPath = path.join(backupDir, backupFileName);
+
     if (!fs.existsSync(backupDir)) {
-      return [];
+      fs.mkdirSync(backupDir, { recursive: true });
     }
-    return fs.readdirSync(backupDir);
+
+    try {
+      const command = `mongodump --uri="${dbUri}" --archive="${backupPath}" --gzip`;
+      await execAsync(command);
+      return backupPath;
+    } catch (error) {
+      console.error(`Backup failed: ${error.message}`);
+      throw new Error(`Backup failed: ${error.message}`);
+    }
   }
 
   async restoreBackup(backupPath: string): Promise<void> {
@@ -92,6 +60,16 @@ export class BackupService {
       throw new Error('Database configuration is missing');
     }
 
-    await this.databaseBackup.restoreBackup(dbName, dbUri, backupPath);
+    try {
+      if (!fs.existsSync(backupPath)) {
+        throw new Error('Backup file not found');
+      }
+
+      const command = `mongorestore --uri="${dbUri}" --archive="${backupPath}" --gzip --drop`;
+      await execAsync(command);
+    } catch (error) {
+      console.error(`Restore failed: ${error.message}`);
+      throw new Error(`Restore failed: ${error.message}`);
+    }
   }
 }
