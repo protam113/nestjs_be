@@ -88,7 +88,7 @@ export class UserService {
     const results = users.map((user) => ({
       status: 'success',
       message: UserSuccess.UserRetrieved,
-      user: {
+      data: {
         _id: user._id,
         name: user.name,
         username: user.username,
@@ -129,7 +129,7 @@ export class UserService {
       phoneNumber,
       name,
       role: Role.Manager,
-      user: {
+      data: {
         userId: user._id,
         username: user.username,
         role: user.role,
@@ -156,7 +156,7 @@ export class UserService {
     return {
       status: 'success',
       message: UserSuccess.UserRetrieved,
-      user: {
+      data: {
         _id,
         name,
         username,

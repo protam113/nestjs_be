@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   BadRequestException,
+  UseInterceptors,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
 import { CategoryService } from './category.service';
@@ -17,6 +18,7 @@ import { SystemLogService } from '../system-log/system-log.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
 import { StatusCode } from './category.constant';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('category')
 export class CategoryController {
@@ -51,6 +53,7 @@ export class CategoryController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor(''))
   async create(@Body() createFaqDto: CreateCategoryDto, @Req() req) {
     const category = await this.categoryService.created(createFaqDto, req.user);
 

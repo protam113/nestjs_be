@@ -72,12 +72,12 @@ export class UserController {
 
     await this.systemLogService.log({
       type: SystemLogType.CreateManager,
-      note: `Admin create manager with ID: ${userId}`,
+      note: `Admin create manager with ID: ${manager.data._id}`,
       status: Status.Success,
       data: {
         user: req.user,
-        id: manager.user._id,
-        title: `Admin create manager name${manager.user.name}`,
+        id: manager.data._id,
+        title: `Admin create manager name ${manager.data.name}`,
       },
     });
 

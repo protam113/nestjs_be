@@ -10,6 +10,7 @@ import {
   Logger,
   UseGuards,
   Req,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ContactService } from './contact.service';
 import { SystemLogService } from '../system-log/system-log.service';
@@ -18,6 +19,7 @@ import { Status, SystemLogType } from '../../entities/system-log.entity';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { ContactStatus } from './contact.constant';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('contact')
 export class ContactController {
@@ -63,6 +65,7 @@ export class ContactController {
   }
 
   @Post()
+  @UseInterceptors(FileInterceptor(''))
   async create(@Body() createFaqDto: CreateContactDto) {
     const contact = await this.contactService.created(createFaqDto);
 
@@ -83,6 +86,7 @@ export class ContactController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor(''))
   async update(
     @Param('id') id: string,
     @Body() updateContactDto: UpdateContactDto,

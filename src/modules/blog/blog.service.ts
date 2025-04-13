@@ -24,7 +24,7 @@ import { BlogDocument, BlogEntity } from '../../entities/blog.entity';
 import { SlugProvider } from '../slug/slug.provider';
 import { CategoryService } from '../category/category.service';
 import { CreateBlogDto } from './dto/create-blog.dto';
-import { DataResponse } from './responses/data.response';
+import { DataResponse, DetailResponse } from './responses/data.response';
 import { Error } from './blog.constant';
 import { BlogStatus } from './blog.constant';
 
@@ -115,18 +115,15 @@ export class BlogService {
       filter.status = status;
 
     if (category) {
-      try {
-        // ép về objectId để so sánh chính xác
-        filter.category = new Types.ObjectId(category);
-      } catch (e) {
-        throw new BadRequestException(Error.InvalidCategoryId);
-      }
+      // Remove ObjectId conversion since we're using UUID
+      filter.category = category;
     }
 
     const [blogs, total] = await Promise.all([
       this.blogModel
         .find(filter)
-        .populate('category', 'name') // populate đầy đủ object category
+        .populate('category', '_id name')
+        .sort({ createdAt: -1 })
         .skip((options.page - 1) * options.limit)
         .limit(options.limit)
         .lean(),
@@ -171,7 +168,7 @@ export class BlogService {
     createBlogDto: CreateBlogDto,
     user: UserData
   ): Promise<BlogDocument> {
-    const { title, content, description, category } = createBlogDto;
+    const { title, content, description, category, status } = createBlogDto;
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
     const blogExists = await this.blogModel.findOne({
@@ -187,7 +184,7 @@ export class BlogService {
       if (!valid) {
         throw new BadRequestException(Error.InvalidCategoryUUIDs);
       }
-      categoryIds = category; // ⚠️ giữ nguyên string UUID
+      categoryIds = category;
     }
 
     const newBlog = new this.blogModel({
@@ -195,8 +192,8 @@ export class BlogService {
       slug,
       content,
       description,
-      category: categoryIds, // string UUIDs
-      status: BlogStatus.Show,
+      category: categoryIds,
+      status: status || BlogStatus.Show, // Use provided status or default to Show
       user: {
         userId: user._id,
         username: user.username,
@@ -246,9 +243,9 @@ export class BlogService {
    * const blog = await blogService.findBySlug('how-to-code-clean');
    */
 
-  async findBySlug(slug: string): Promise<DataResponse> {
+  async findBySlug(slug: string): Promise<DetailResponse> {
     const cacheKey = `blog_${slug}`;
-    const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
+    const cached = await this.redisCacheService.get<DetailResponse>(cacheKey);
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
@@ -267,7 +264,10 @@ export class BlogService {
       .set(cacheKey, result, 3600)
       .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
 
-    return result;
+    return {
+      status: 'success',
+      data: result,
+    };
   }
 
   /**

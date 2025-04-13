@@ -59,11 +59,22 @@ export class ContactService {
 
     const filter: any = {};
 
-    if (startDate && endDate)
+    if (startDate && endDate) {
       filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    }
 
-    if (status && Object.values(ContactStatus).includes(status))
+    // Improved status filtering
+    if (status) {
+      // Log the incoming status for debugging
+      this.logger.debug(`Filtering by status: ${status}`);
+
+      if (!Object.values(ContactStatus).includes(status)) {
+        throw new BadRequestException(
+          `Invalid status. Valid values are: ${Object.values(ContactStatus).join(', ')}`
+        );
+      }
       filter.status = status;
+    }
 
     if (service) {
       if (service === 'null') {

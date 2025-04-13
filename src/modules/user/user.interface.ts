@@ -14,11 +14,11 @@ export interface User {
 export interface UserResponse {
   status: string;
   message: string;
-  user: Omit<User, 'password'>;
+  data: Omit<User, 'password'>;
 }
 
 export interface AuthResponse {
-  user: UserResponse;
+  data: UserResponse;
 }
 
 export interface UserData {

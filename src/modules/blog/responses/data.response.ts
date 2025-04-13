@@ -10,8 +10,23 @@ export interface DataResponse {
   content: string;
   description: string;
   link?: string;
-  category?: Category[];
+  category?: Category;
   status: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DetailResponse {
+  status: string;
+  data: {
+    _id: string;
+    title: string;
+    slug: string;
+    content: string;
+    description: string;
+    category?: Category;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
 }
