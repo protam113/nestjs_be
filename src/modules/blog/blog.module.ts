@@ -7,12 +7,16 @@ import { BlogEntity, BlogSchema } from '../../entities/blog.entity';
 import { BlogController } from './blog.controller';
 import { BlogService } from './blog.service';
 import { RedisCacheModule } from '../cache/redis-cache.module';
+import { MediaModule } from '../media/media.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: BlogEntity.name, schema: BlogSchema }]),
+    AuthModule,
     SystemLogModule,
     RedisCacheModule,
+    MediaModule,
     CategoryModule,
   ],
   controllers: [BlogController],

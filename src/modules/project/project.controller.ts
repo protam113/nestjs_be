@@ -16,20 +16,20 @@ import {
 import { SystemLogService } from '../system-log/system-log.service';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
-import { ServiceStatus } from './service.constant';
-import { CreateServiceDto } from './dto/create-service';
-import { ServiceService } from './service.service';
+import { ProjectStatus } from './project.constant';
+import { CreateProjectDto } from './dto/create_project.dto';
+import { ProjectService } from './project.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RolesGuard } from '../auth/guards/RolesGuard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
 
-@Controller('service')
-export class ServiceController {
-  private readonly logger = new Logger(ServiceController.name);
+@Controller('project')
+export class ProjectController {
+  private readonly logger = new Logger(ProjectController.name);
 
   constructor(
-    private readonly serviceService: ServiceService,
+    private readonly projectService: ProjectService,
     private readonly systemLogService: SystemLogService
   ) {}
 
@@ -39,7 +39,7 @@ export class ServiceController {
     @Query('endDate') endDate?: string,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
-    @Query('status') status?: ServiceStatus
+    @Query('status') status?: ProjectStatus
   ) {
     this.logger.debug('Fetching services with filters:', {
       startDate,
@@ -49,11 +49,11 @@ export class ServiceController {
       status,
     });
 
-    return this.serviceService.findAll(
+    return this.projectService.findAll(
       { page, limit },
       startDate,
       endDate,
-      status as ServiceStatus
+      status as ProjectStatus
     );
   }
 
@@ -61,19 +61,19 @@ export class ServiceController {
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async create(
-    @Body() createServiceDto: CreateServiceDto,
+    @Body() createProjectDto: CreateProjectDto,
     @Req() req,
     @UploadedFile() file: Express.Multer.File
   ) {
-    const service = await this.serviceService.create(
-      createServiceDto,
+    const service = await this.projectService.create(
+      createProjectDto,
       req.user,
       file
     );
 
     await this.systemLogService.log({
       type: SystemLogType.ServiceCreated,
-      note: `User ${req.user.email} created a new service post`,
+      note: `User ${req.user.email} created a new project post`,
       status: Status.Success,
       data: {
         user: req.user,
@@ -88,11 +88,11 @@ export class ServiceController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   async delete(@Param('id') id: string, @Req() req) {
-    await this.serviceService.delete(id);
+    await this.projectService.delete(id);
 
     await this.systemLogService.log({
       type: SystemLogType.ServiceDeleted,
-      note: `User ${req.user.name} deleted a service`,
+      note: `User ${req.user.name} deleted a project`,
       status: Status.Success,
       data: {
         user: req.user,
@@ -106,7 +106,7 @@ export class ServiceController {
 
   @Get(':slug')
   async getServiceBySlug(@Param('slug') slug: string) {
-    return this.serviceService.findBySlug(slug);
+    return this.projectService.findBySlug(slug);
   }
 
   @Patch(':id/status')
@@ -115,8 +115,8 @@ export class ServiceController {
   @UseInterceptors(FileInterceptor(''))
   async updateStatus(
     @Param('id') id: string,
-    @Body('status') status: ServiceStatus
+    @Body('status') status: ProjectStatus
   ) {
-    return this.serviceService.updateStatus(id, status);
+    return this.projectService.updateStatus(id, status);
   }
 }

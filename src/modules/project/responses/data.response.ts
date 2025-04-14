@@ -8,7 +8,9 @@ export interface DataResponse {
     content: string;
     description: string;
     link?: string;
-    price?: number;
+    brand_name: string;
+    testimonial: string;
+    client: string;
     status: string;
     createdAt: Date;
     updatedAt: Date;

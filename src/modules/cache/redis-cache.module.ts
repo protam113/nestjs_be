@@ -12,9 +12,12 @@ import { CacheModule } from '@nestjs/cache-manager';
       useFactory: async (configService: ConfigService) => ({
         store: redisStore,
         host: configService.get('REDIS_HOST'),
-        port: configService.get('REDIS_PORT'),
+        port: parseInt(configService.get('REDIS_PORT') || '6379'),
         password: configService.get('REDIS_PASSWORD'),
         ttl: 60 * 60 * 24, // 24 hours
+        retryStrategy: (times: number) => {
+          return Math.min(times * 50, 2000);
+        },
       }),
     }),
   ],

@@ -11,4 +11,5 @@ export const COLLECTION_KEYS = {
   SYSTEMLOGS: process.env.SYSTEMLOGS_COLLECTION || 'system_logs',
   PRICING: process.env.PRICING_COLLECTION || 'pricings',
   SEO: process.env.SEO_COLLECTION || 'seos',
+  PROJECT: process.env.PROJECT_COLLECTION || 'projects',
 };

@@ -109,9 +109,8 @@ export class CategoryService {
     });
 
     try {
-      const saved = await newCategory.save();
-
       await this.redisCacheService.reset();
+      const saved = await newCategory.save();
 
       return saved;
     } catch (err) {
@@ -169,19 +168,14 @@ export class CategoryService {
     return response;
   }
 
-  async validateCategories(categoryIds: string[]): Promise<boolean> {
-    if (!categoryIds || categoryIds.length === 0) {
-      return true;
+  async validateCategories(categoryIds: string): Promise<boolean> {
+    try {
+      const service = await this.categoryModel.findById(categoryIds).exec();
+      return !!service; // Returns true if service exists, false otherwise
+    } catch (error) {
+      this.logger.error(`Error validating service: ${error.message}`);
+      return false;
     }
-
-    const categories = await this.categoryModel
-      .find({
-        _id: { $in: categoryIds },
-      })
-      .lean();
-
-    // Check if all provided category IDs exist
-    return categories.length === categoryIds.length;
   }
 
   async update(

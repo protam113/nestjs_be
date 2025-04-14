@@ -4,6 +4,8 @@ export enum Error {
   BlogNotFound = 'Blog not found',
   InvalidCategoryId = 'Invalid category ID format',
   InvalidCategoryUUIDs = 'Invalid category UUIDs provided',
+  CategoryNotFound = 'Category not found',
+  CategoryValidation = 'Category validation failed',
 }
 
 export enum Success {
@@ -16,4 +18,5 @@ export enum BlogStatus {
   Show = 'show',
   Hide = 'hide',
   Popular = 'popular',
+  Draft = 'draft',
 }

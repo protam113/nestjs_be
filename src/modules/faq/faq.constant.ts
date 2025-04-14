@@ -9,3 +9,11 @@ export enum Success {
   Created = 'FaQ created successfully',
   Updated = 'FaQ updated successfully',
 }
+
+export enum Status {
+  Show = 'show',
+  Hide = 'hide',
+  Main = 'main',
+}
+
+export const MAX_MAIN_FAQS = 4;

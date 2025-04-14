@@ -2,25 +2,25 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SystemLogModule } from '../system-log/system-log.module';
 import { SlugProvider } from '../slug/slug.provider';
-import { ServiceEntity, ServiceSchema } from '../../entities/service.entity';
-import { ServiceService } from './service.service';
-import { ServiceController } from './service.controller';
 import { RedisCacheModule } from '../cache/redis-cache.module';
+import { ProjectEntity, ProjectSchema } from 'src/entities/project.entity';
+import { ProjectService } from './project.service';
+import { ProjectController } from './project.controller';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: ServiceEntity.name, schema: ServiceSchema },
+      { name: ProjectEntity.name, schema: ProjectSchema },
     ]),
     SystemLogModule,
-    AuthModule,
-    MediaModule,
     RedisCacheModule,
+    MediaModule,
+    AuthModule,
   ],
-  controllers: [ServiceController],
-  providers: [ServiceService, SlugProvider],
-  exports: [ServiceService],
+  controllers: [ProjectController],
+  providers: [ProjectService, SlugProvider],
+  exports: [ProjectService],
 })
-export class ServiceModule {}
+export class ProjectModule {}

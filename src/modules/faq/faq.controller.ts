@@ -53,9 +53,14 @@ export class FaqController {
     const paginationOptions = {
       page: Number(filter.page) || 1,
       limit: Number(filter.limit) || 10,
-      status: filter.status,
     };
-    return await this.faqService.findAll(paginationOptions);
+
+    return await this.faqService.findAll(
+      paginationOptions,
+      filter.startDate,
+      filter.endDate,
+      filter.status
+    );
   }
 
   @Get(':id')

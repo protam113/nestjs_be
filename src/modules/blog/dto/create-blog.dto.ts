@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 import { BlogStatus } from '../blog.constant';
 
 export class CreateBlogDto {
@@ -14,10 +14,9 @@ export class CreateBlogDto {
   @IsString()
   description: string;
 
-  @IsArray()
-  @IsString({ each: true })
+  @IsString()
   @IsOptional()
-  category?: string[];
+  category?: string;
 
   status?: BlogStatus; // Add this optional field
 }

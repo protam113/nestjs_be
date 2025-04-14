@@ -1,3 +1,4 @@
+import { SlugProvider } from '../slug/slug.provider';
 import { InjectModel } from '@nestjs/mongoose';
 import {
   BadRequestException,
@@ -5,28 +6,25 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-
-import { MediaService } from '../media/media.service';
-import { SlugProvider } from '../slug/slug.provider';
-import { ServiceDocument, ServiceEntity } from '../../entities/service.entity';
-import { RedisCacheService } from '../cache/redis-cache.service';
-
 import { Model } from 'mongoose';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { UserData } from '../user/user.interface';
-import { CreateServiceDto } from './dto/create-service';
-import { DataResponse } from './responses/service.response';
-import { Error, ServiceStatus } from './service.constant';
+import { CreateProjectDto } from './dto/create_project.dto';
+import { DataResponse } from './responses/data.response';
+import { Error, ProjectStatus } from './project.constant';
+import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
+import { ProjectDocument, ProjectEntity } from 'src/entities/project.entity';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
-export class ServiceService {
-  private readonly logger = new Logger(ServiceService.name);
+export class ProjectService {
+  private readonly logger = new Logger(ProjectService.name);
 
   constructor(
-    @InjectModel(ServiceEntity.name)
-    private readonly serviceModel: Model<ServiceDocument>,
+    @InjectModel(ProjectEntity.name)
+    private readonly projectModel: Model<ProjectDocument>,
     private readonly slugProvider: SlugProvider,
     private readonly redisCacheService: RedisCacheService,
     private readonly mediaService: MediaService
@@ -36,9 +34,9 @@ export class ServiceService {
     options: PaginationOptionsInterface,
     startDate?: string,
     endDate?: string,
-    status?: ServiceStatus
+    status?: ProjectStatus
   ): Promise<Pagination<DataResponse>> {
-    const cacheKey = buildCacheKey('services', {
+    const cacheKey = buildCacheKey('projects', {
       page: options.page,
       limit: options.limit,
       start: startDate,
@@ -62,17 +60,17 @@ export class ServiceService {
       };
     }
 
-    if (status && Object.values(ServiceStatus).includes(status)) {
+    if (status && Object.values(ProjectStatus).includes(status)) {
       filter.status = status;
     }
 
-    const services = await this.serviceModel
+    const services = await this.projectModel
       .find(filter)
       .skip((options.page - 1) * options.limit)
       .limit(options.limit)
       .lean();
 
-    const total = await this.serviceModel.countDocuments(filter);
+    const total = await this.projectModel.countDocuments(filter);
 
     const results = services.map(this.mapToDataResponse);
 
@@ -84,28 +82,42 @@ export class ServiceService {
       current_page: options.page,
     });
 
-    await this.redisCacheService
-      .set(cacheKey, result, 604800)
-      .catch(() => null);
+    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
     return result;
   }
 
+  async delete(id: string): Promise<void> {
+    const result = await this.projectModel.findByIdAndDelete(id);
+    await this.redisCacheService.reset();
+    if (!result) {
+      throw new NotFoundException(Error.NotFound);
+    }
+  }
+
   async create(
-    createServiceDto: CreateServiceDto,
+    createProjectDto: CreateProjectDto,
     user: UserData,
     file?: Express.Multer.File
-  ): Promise<ServiceDocument> {
-    const { title, content, description, price, link } = createServiceDto;
+  ): Promise<ProjectDocument> {
+    const {
+      title,
+      content,
+      description,
+      link,
+      brand_name,
+      testimonial,
+      client,
+    } = createProjectDto;
 
     // Generate slug from title
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
-    const existing = await this.serviceModel.findOne({
+    const existing = await this.projectModel.findOne({
       $or: [{ title }, { slug }],
     });
 
     if (existing) {
-      throw new BadRequestException(Error.ThisServiceAlreadyExists);
+      throw new BadRequestException(Error.ThisProjectAlreadyExists);
     }
 
     let imageUrl = '';
@@ -113,7 +125,7 @@ export class ServiceService {
       throw new BadRequestException('File is required'); // Nếu file bắt buộc
     }
 
-    const folderPath = '/service';
+    const folderPath = '/projects';
     try {
       const uploadedImage = await this.mediaService.uploadFile(
         folderPath,
@@ -125,15 +137,17 @@ export class ServiceService {
       throw new BadRequestException('File upload failed');
     }
 
-    const newService = new this.serviceModel({
+    const newProject = new this.projectModel({
       title,
       slug,
       content,
       description,
-      price: price || undefined,
-      link: link || undefined,
+      brand_name,
       file: imageUrl || '',
-      status: ServiceStatus.Draft,
+      testimonial,
+      client,
+      link: link || undefined,
+      status: ProjectStatus.Draft,
       user: {
         userId: user._id,
         username: user.username,
@@ -141,57 +155,22 @@ export class ServiceService {
       },
     });
     await this.redisCacheService.reset();
-    return await newService.save();
-  }
 
-  async delete(id: string): Promise<void> {
-    const result = await this.serviceModel.findByIdAndDelete(id);
-    await this.redisCacheService.reset();
-    if (!result) {
-      throw new NotFoundException(Error.ServiceNotFound);
-    }
-  }
-
-  async updateStatus(
-    id: string,
-    status: ServiceStatus
-  ): Promise<ServiceDocument> {
-    // Kiểm tra tính hợp lệ của status
-    if (!Object.values(ServiceStatus).includes(status)) {
-      throw new BadRequestException('Invalid status value');
-    }
-
-    // Tìm và cập nhật blog
-    const service = await this.serviceModel.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true } // Trả về document sau khi cập nhật
-    );
-
-    if (!service) {
-      throw new NotFoundException(Error.ServiceNotFound);
-    }
-
-    // Xóa cache để đảm bảo dữ liệu mới nhất
-    await this.redisCacheService
-      .reset()
-      .catch((err) => this.logger.error('Failed to clear cache:', err));
-
-    return service;
+    return await newProject.save();
   }
 
   async findBySlug(slug: string): Promise<DataResponse> {
-    const cacheKey = `service_${slug}`;
+    const cacheKey = `project_${slug}`;
     const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
       return cached;
     }
-    const service = await this.serviceModel.findOne({ slug }).lean();
+    const service = await this.projectModel.findOne({ slug }).lean();
 
     if (!service) {
-      throw new NotFoundException(Error.ServiceNotFound);
+      throw new NotFoundException(Error.NotFound);
     }
     const result = this.mapToDataResponse(service);
 
@@ -202,30 +181,59 @@ export class ServiceService {
     return result;
   }
 
-  async validateService(serviceId: string): Promise<boolean> {
+  async validateProject(serviceId: string): Promise<boolean> {
     try {
-      const service = await this.serviceModel.findById(serviceId).exec();
+      const service = await this.projectModel.findById(serviceId).exec();
       return !!service; // Returns true if service exists, false otherwise
     } catch (error) {
       this.logger.error(`Error validating service: ${error.message}`);
       return false;
     }
   }
-  private mapToDataResponse(service: any): DataResponse {
+
+  async updateStatus(
+    id: string,
+    status: ProjectStatus
+  ): Promise<ProjectDocument> {
+    // Kiểm tra tính hợp lệ của status
+    if (!Object.values(ProjectStatus).includes(status)) {
+      throw new BadRequestException('Invalid status value');
+    }
+
+    const project = await this.projectModel.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true } // Trả về document sau khi cập nhật
+    );
+
+    if (!project) {
+      throw new NotFoundException(Error.NotFound);
+    }
+
+    await this.redisCacheService
+      .reset()
+      .catch((err) => this.logger.error('Failed to clear cache:', err));
+
+    return project;
+  }
+
+  private mapToDataResponse(project: any): DataResponse {
     return {
       status: 'success',
       result: {
-        _id: service._id,
-        title: service.title,
-        file: service.file,
-        slug: service.slug,
-        content: service.content,
-        description: service.description,
-        link: service.link,
-        price: service.price,
-        status: service.status,
-        createdAt: service.createdAt || new Date(),
-        updatedAt: service.updatedAt || new Date(),
+        _id: project._id,
+        title: project.title,
+        slug: project.slug,
+        file: project.file,
+        content: project.content,
+        description: project.description,
+        link: project.link,
+        brand_name: project.brand_name,
+        client: project.client,
+        testimonial: project.testimonial,
+        status: project.status,
+        createdAt: project.createdAt || new Date(),
+        updatedAt: project.updatedAt || new Date(),
       },
     };
   }

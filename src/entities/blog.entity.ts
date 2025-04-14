@@ -22,6 +22,9 @@ export class BlogEntity extends Base {
   content: string;
 
   @Prop({ required: true })
+  file: string;
+
+  @Prop({ required: true })
   description: string;
 
   @Prop()
@@ -33,11 +36,8 @@ export class BlogEntity extends Base {
   @Prop({ type: Object })
   user: any;
 
-  @Prop({
-    type: [{ type: String, ref: CategoryEntity.name }],
-    default: [],
-  })
-  category: string[];
+  @Prop({ type: { type: String, ref: CategoryEntity.name } })
+  category: string;
 }
 export type BlogDocument = BlogEntity & Document;
 export const BlogSchema = SchemaFactory.createForClass(BlogEntity);

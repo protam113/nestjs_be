@@ -9,14 +9,20 @@ import {
   Req,
   UseGuards,
   Logger,
+  UseInterceptors,
+  UploadedFile,
+  Patch,
 } from '@nestjs/common';
 import { SystemLogService } from '../system-log/system-log.service';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
-
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../common/enums/role.enum';
 import { BlogService } from './blog.service';
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { BlogStatus } from './blog.constant';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { RolesGuard } from '../auth/guards/RolesGuard';
 
 @Controller('blog')
 export class BlogController {
@@ -88,8 +94,13 @@ export class BlogController {
    */
   @Post()
   @UseGuards(JwtAuthGuard)
-  async create(@Body() createBlogDto: CreateBlogDto, @Req() req) {
-    const blog = await this.blogService.create(createBlogDto, req.user);
+  @UseInterceptors(FileInterceptor('file'))
+  async create(
+    @Body() createBlogDto: CreateBlogDto,
+    @Req() req,
+    @UploadedFile() file: Express.Multer.File
+  ) {
+    const blog = await this.blogService.create(createBlogDto, req.user, file);
 
     await this.systemLogService.log({
       type: SystemLogType.BlogCreated,
@@ -155,5 +166,16 @@ export class BlogController {
   @Get(':slug')
   async getBlogBySlug(@Param('slug') slug: string) {
     return this.blogService.findBySlug(slug);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.Admin)
+  @UseInterceptors(FileInterceptor(''))
+  async updateStatus(
+    @Param('id') id: string,
+    @Body('status') status: BlogStatus
+  ) {
+    return this.blogService.updateStatus(id, status);
   }
 }

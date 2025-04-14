@@ -33,6 +33,8 @@ import { RedisCacheModule } from '../modules/cache/redis-cache.module';
 import { BackupModule } from '../modules/backup/backup.module';
 import { PricingModule } from '../modules/pricing/pricing.module';
 import { SeoModule } from 'src/modules/seo/seo.module';
+import { ProjectModule } from 'src/modules/project/project.module';
+import { MediaModule } from 'src/modules/media/media.module';
 
 @Module({
   imports: [
@@ -52,8 +54,10 @@ import { SeoModule } from 'src/modules/seo/seo.module';
     CategoryModule,
     BlogModule,
     ServiceModule,
+    ProjectModule,
     ContactModule,
     PricingModule,
+    MediaModule,
   ],
   controllers: [AppBaseController],
   providers: [
@@ -142,6 +146,14 @@ export class AppModule implements NestModule {
         },
         {
           path: '/service/:slug',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/project',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/project/:slug',
           method: RequestMethod.GET,
         }
       )

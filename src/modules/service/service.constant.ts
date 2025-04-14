@@ -15,4 +15,5 @@ export enum ServiceStatus {
   Show = 'show',
   Hide = 'hide',
   Popular = 'popular',
+  Draft = 'draft',
 }

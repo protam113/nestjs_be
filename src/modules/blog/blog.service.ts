@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 // Pagination
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
@@ -27,6 +27,7 @@ import { CreateBlogDto } from './dto/create-blog.dto';
 import { DataResponse, DetailResponse } from './responses/data.response';
 import { Error } from './blog.constant';
 import { BlogStatus } from './blog.constant';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 
@@ -54,7 +55,8 @@ export class BlogService {
     private readonly blogModel: Model<BlogDocument>,
     private readonly slugProvider: SlugProvider,
     private readonly categoryService: CategoryService,
-    private readonly redisCacheService: RedisCacheService
+    private readonly redisCacheService: RedisCacheService,
+    private readonly mediaService: MediaService
   ) {}
 
   /**
@@ -139,7 +141,7 @@ export class BlogService {
       current_page: options.page,
     });
 
-    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    await this.redisCacheService.set(cacheKey, result, 7200).catch(() => null);
     return result;
   }
 
@@ -166,7 +168,8 @@ export class BlogService {
 
   async create(
     createBlogDto: CreateBlogDto,
-    user: UserData
+    user: UserData,
+    file?: Express.Multer.File
   ): Promise<BlogDocument> {
     const { title, content, description, category, status } = createBlogDto;
     const slug = this.slugProvider.generateSlug(title, { unique: true });
@@ -178,13 +181,37 @@ export class BlogService {
       throw new BadRequestException(Error.ThisBlogAlreadyExists);
     }
 
-    let categoryIds: string[] = [];
-    if (category?.length) {
-      const valid = await this.categoryService.validateCategories(category);
-      if (!valid) {
-        throw new BadRequestException(Error.InvalidCategoryUUIDs);
+    let imageUrl = '';
+    if (!file) {
+      throw new BadRequestException('File is required'); // Nếu file bắt buộc
+    }
+
+    const folderPath = '/blog';
+    try {
+      const uploadedImage = await this.mediaService.uploadFile(
+        folderPath,
+        file
+      );
+      imageUrl = uploadedImage.url;
+    } catch (error) {
+      this.logger.error('File upload failed:', error);
+      throw new BadRequestException('File upload failed');
+    }
+
+    let categoryIds: string | undefined;
+
+    if (category) {
+      try {
+        const valid = await this.categoryService.validateCategories(category);
+        if (!valid) {
+          throw new BadRequestException(Error.CategoryNotFound);
+        }
+        categoryIds = category;
+      } catch (error) {
+        throw new BadRequestException(
+          `${Error.CategoryValidation}: ${error.message}`
+        );
       }
-      categoryIds = category;
     }
 
     const newBlog = new this.blogModel({
@@ -193,7 +220,8 @@ export class BlogService {
       content,
       description,
       category: categoryIds,
-      status: status || BlogStatus.Show, // Use provided status or default to Show
+      file: imageUrl || '',
+      status: status || BlogStatus.Draft,
       user: {
         userId: user._id,
         username: user.username,
@@ -261,13 +289,54 @@ export class BlogService {
     const result = this.mapToDataResponse(blog);
 
     await this.redisCacheService
-      .set(cacheKey, result, 3600)
+      .set(cacheKey, result, 10800)
       .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
 
     return {
       status: 'success',
       data: result,
     };
+  }
+
+  /**
+   * @PATCH /blogs/:id/status
+   * @summary Updates the status of a blog post by its ID
+   *
+   * @param {string} id - The ID of the blog post to update
+   * @param {BlogStatus} status - The new status to set for the blog
+   * @returns {Promise<BlogDocument>} - The updated blog document
+   *
+   * @throws {NotFoundException} - If no blog post is found with the given ID
+   * @throws {BadRequestException} - If the provided status is invalid
+   *
+   * @sideEffect - Clears the blog cache after updating status
+   *
+   * @example
+   * await blogService.updateStatus('660123abc...', BlogStatus.Published);
+   */
+  async updateStatus(id: string, status: BlogStatus): Promise<BlogDocument> {
+    // Kiểm tra tính hợp lệ của status
+    if (!Object.values(BlogStatus).includes(status)) {
+      throw new BadRequestException('Invalid status value');
+    }
+
+    // Tìm và cập nhật blog
+    const blog = await this.blogModel.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true } // Trả về document sau khi cập nhật
+    );
+
+    if (!blog) {
+      throw new NotFoundException(Error.BlogNotFound);
+    }
+
+    // Xóa cache để đảm bảo dữ liệu mới nhất
+    await this.redisCacheService
+      .reset()
+      .catch((err) => this.logger.error('Failed to clear cache:', err));
+
+    return blog;
   }
 
   /**
@@ -285,6 +354,7 @@ export class BlogService {
       _id: blog._id,
       title: blog.title,
       slug: blog.slug,
+      file: blog.file,
       content: blog.content,
       description: blog.description,
       link: blog.link,

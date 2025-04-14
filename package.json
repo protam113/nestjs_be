@@ -32,6 +32,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/schedule": "^5.0.1",
     "@nestjs/terminus": "^11.0.0",
+    "@types/multer": "^1.4.12",
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
     "cache-manager": "4.1.0",

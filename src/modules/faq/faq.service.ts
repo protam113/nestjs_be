@@ -11,7 +11,7 @@ import { DataResponse } from './responses/data.response';
 import { FaqEntity, FaqDocument } from '../../entities/faq.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
-import { Error } from './faq.constant';
+import { Error, MAX_MAIN_FAQS, Status } from './faq.constant';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { UpdateFaqDto } from './dto/update_faq.dto';
@@ -35,8 +35,19 @@ export class FaqService {
       throw new BadRequestException(Error.QuestionRequired);
     }
 
-    const normalizedQuestion = createFaqDto.question.trim();
+    // Check main FAQ limit if status is 'main'
+    if (createFaqDto.status === Status.Main) {
+      const mainFaqCount = await this.faqModel.countDocuments({
+        status: Status.Main,
+      });
+      if (mainFaqCount >= MAX_MAIN_FAQS) {
+        throw new BadRequestException(
+          'Maximum number of main FAQs (4) has been reached'
+        );
+      }
+    }
 
+    const normalizedQuestion = createFaqDto.question.trim();
     createFaqDto.question = normalizedQuestion;
 
     const existing = await this.faqModel.findOne({
@@ -59,9 +70,10 @@ export class FaqService {
     });
 
     try {
+      await this.redisCacheService.reset();
+
       return await newFaq.save();
     } catch (err) {
-      // ✅ Nếu đã set unique index ở MongoDB, có thể dính lỗi trùng tại đây
       if (err.code === 11000) {
         throw new BadRequestException(Error.QuestionAlreadyExit);
       }
@@ -72,14 +84,15 @@ export class FaqService {
   async findAll(
     options: PaginationOptionsInterface,
     startDate?: string,
-    endDate?: string
+    endDate?: string,
+    status?: Status
   ): Promise<Pagination<DataResponse>> {
     const cacheKey = buildCacheKey('faq', {
       page: options.page,
       limit: options.limit,
       start: startDate,
       end: endDate,
-      status: 'all', // Fix: Remove reference to undefined 'status' variable
+      status: status || 'all',
     });
     const cached =
       await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
@@ -99,10 +112,8 @@ export class FaqService {
       };
     }
 
-    // Lọc theo status nếu có
-    if (filter.status) {
-      filter.status = filter.status;
-    }
+    if (status && Object.values(Status).includes(status))
+      filter.status = status;
 
     const faqs = await this.faqModel
       .find(filter)
@@ -137,7 +148,9 @@ export class FaqService {
       current_page: options.page,
     });
 
-    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    await this.redisCacheService
+      .set(cacheKey, result, 604800)
+      .catch(() => null);
     return result;
   }
 
@@ -180,6 +193,8 @@ export class FaqService {
 
   async delete(id: string): Promise<void> {
     const result = await this.faqModel.findByIdAndDelete(id);
+    await this.redisCacheService.reset();
+
     if (!result) {
       throw new NotFoundException(Error.NotFound);
     }

@@ -4,8 +4,15 @@ import { Schema, Prop, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { COLLECTION_KEYS } from 'src/database/collections';
 
+export enum Status {
+  Show = 'show',
+  Hide = 'hide',
+  Draft = 'draft',
+  Popular = 'popular',
+}
+
 @Schema()
-export class ServiceEntity extends Base {
+export class ProjectEntity extends Base {
   @Prop({ type: String, default: uuidv4 })
   _id: string;
 
@@ -27,18 +34,24 @@ export class ServiceEntity extends Base {
   @Prop({ required: true })
   description: string;
 
+  @Prop({ required: true })
+  brand_name: string;
+
+  @Prop({ required: true })
+  testimonial: string;
+
+  @Prop({ required: true })
+  client: string;
+
   @Prop()
   link?: string;
 
-  @Prop()
-  price?: number;
-
-  @Prop({ default: 'show' })
+  @Prop({ enum: Status, default: Status.Draft })
   status: string;
 
   @Prop({ type: Object })
   user: any;
 }
-export type ServiceDocument = ServiceEntity & Document;
-export const ServiceSchema = SchemaFactory.createForClass(ServiceEntity);
-ServiceSchema.set('collection', COLLECTION_KEYS.SERVICE);
+export type ProjectDocument = ProjectEntity & Document;
+export const ProjectSchema = SchemaFactory.createForClass(ProjectEntity);
+ProjectSchema.set('collection', COLLECTION_KEYS.PROJECT);
