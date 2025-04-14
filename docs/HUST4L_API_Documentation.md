@@ -3,52 +3,73 @@
 Welcome to the official API documentation for **HUST4L**.  
 This API follows RESTful principles and provides a complete set of endpoints to manage authentication, users, content, SEO, services, and more.
 
-## 🔐 AUTH - Authentication
+## API Endpoints
 
-| Method | Endpoint           | Description                       |
-| ------ | ------------------ | --------------------------------- |
-| GET    | `/me`              | Get the authenticated user's info |
-| GET    | `/app-info`        | Get app-level metadata            |
-| POST   | `/login`           | Log in a user                     |
-| POST   | `/update-password` | Change password                   |
-| POST   | `/verify-code`     | Verify OTP                        |
-| POST   | `/logout`          | Log out user                      |
+### Categories
+- `GET /category` - Get all categories with pagination
+- `POST /category` - Create a new category
+- `GET /category/:slug` - Get category by slug
+- `PATCH /category/:id` - Update category
+- `DELETE /category/:id` - Delete category
 
-## 👤 Users
+### Blogs
+- `GET /blog` - Get all blogs with pagination and filters
+- `POST /blog` - Create a new blog
+- `GET /blog/:slug` - Get blog by slug
+- `PATCH /blog/:id/status` - Update blog status
+- `DELETE /blog/:id` - Delete blog
 
-Manage users, roles, and profiles.
+### Services
+- `GET /service` - Get all services with pagination
+- `POST /service` - Create a new service
+- `GET /service/:slug` - Get service by slug
+- `GET /service/:id` - Get service by ID
+- `PATCH /service/:id` - Update service
+- `DELETE /service/:id` - Delete service
 
-## 🗂️ Blog Category
+### FAQs
+- `GET /faq` - Get all FAQs with pagination
+- `POST /faq` - Create a new FAQ
+- `GET /faq/:id` - Get FAQ by ID
+- `PATCH /faq/:id` - Update FAQ
+- `DELETE /faq/:id` - Delete FAQ
 
-Manage blog categories (CRUD, assign to posts).
+### SEO
+- `GET /seo` - Get all SEO entries
+- `POST /seo` - Create a new SEO entry
+- `GET /seo/:slug` - Get SEO by slug
+- `PATCH /seo/:id` - Update SEO entry
+- `DELETE /seo/:id` - Delete SEO entry
 
-## 📝 Blog
+### Pricings
+- `GET /pricing` - Get all pricing plans with pagination
+- `POST /pricing` - Create a new pricing plan
+- `GET /pricing/:slug` - Get pricing by slug
+- `GET /pricing/:id` - Get pricing by ID
+- `PATCH /pricing/:id` - Update pricing
+- `DELETE /pricing/:id` - Delete pricing
 
-Create, update, and fetch blog posts in Markdown/HTML.
+### Contact
+- `GET /contact` - Get all contacts with pagination
+- `POST /contact` - Create a new contact
+- `GET /contact/:id` - Get contact by ID
+- `PATCH /contact/:id` - Update contact status
+- `DELETE /contact/:id` - Delete contact
 
-## 🧾 Logs
+### User Management
+- `POST /auth/login` - User login
+- `POST /auth/register` - User registration
+- `GET /auth/profile` - Get user profile
+- `PATCH /auth/profile` - Update user profile
+- `POST /auth/refresh-token` - Refresh access token
+- `POST /auth/logout` - User logout
 
-Track system and user actions.
-
-## 🛠️ Service
-
-CRUD services like web design, SEO, etc.
-
-## 📬 Contact
-
-Submit and manage contact forms.
-
-## 🔍 SEO
-
-Manage meta info for each route/page.
-
-## ❓ FAQ
-
-CRUD common questions and answers.
-
-## 💰 Pricing
-
-Define and manage pricing packages.
+Each endpoint supports:
+- Pagination where applicable
+- Authentication & Authorization
+- Redis caching
+- Input validation
+- Error handling
 
 ## 🩺 Health Check
 

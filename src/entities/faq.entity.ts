@@ -3,6 +3,7 @@ import { Document } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.entity';
 import { COLLECTION_KEYS } from 'src/database/collections';
+import { Status } from 'src/modules/faq/faq.constant';
 
 @Schema()
 export class FaqEntity extends Base {
@@ -18,7 +19,7 @@ export class FaqEntity extends Base {
   @Prop({ type: Object })
   user: any;
 
-  @Prop({ default: 'show' })
+  @Prop({ enum: Status, default: Status.Show })
   status: string;
 }
 

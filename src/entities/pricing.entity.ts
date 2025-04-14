@@ -3,6 +3,7 @@ import { Document } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.entity';
 import { COLLECTION_KEYS } from 'src/database/collections';
+import { PricingStatus } from 'src/modules/pricing/pricing,constant';
 
 @Schema()
 export class PricingEntity extends Base {
@@ -27,7 +28,7 @@ export class PricingEntity extends Base {
   @Prop({ type: Object })
   user: any;
 
-  @Prop({ default: 'show', enum: ['show', 'hide'] })
+  @Prop({ enum: PricingStatus, default: PricingStatus.Show })
   status: string;
 }
 

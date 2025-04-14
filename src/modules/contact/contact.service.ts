@@ -151,18 +151,12 @@ export class ContactService {
 
     if (service) {
       try {
-        // Add logging to debug service validation
-        this.logger.debug(`Validating service ID: ${service}`);
-
         const valid = await this.serviceService.validateService(service);
-        this.logger.debug(`Validation result: ${valid}`);
-
         if (!valid) {
           throw new BadRequestException(Error.ServiceNotFound);
         }
         serviceId = service;
       } catch (error) {
-        this.logger.error(`Service validation error: ${error.message}`);
         throw new BadRequestException(
           `${Error.ServiceValidation}: ${error.message}`
         );
@@ -186,12 +180,7 @@ export class ContactService {
         recipientEmail: createContactDto.email,
         name: createContactDto.name,
       });
-      this.logger.log(
-        `Thank you email has been sent ${createContactDto.email}`
-      );
-    } catch (error) {
-      this.logger.error(`Error sending email: ${error.message}`);
-    }
+    } catch (error) {}
     await this.redisCacheService.reset();
     return savedContact;
   }

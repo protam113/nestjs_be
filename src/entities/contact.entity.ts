@@ -34,7 +34,6 @@ export class ContactEntity extends Base {
   @Prop({ type: String, ref: ServiceEntity.name })
   service?: string;
 
-  // Remove this line
   @Prop({ enum: ContactStatus, default: ContactStatus.Pending })
   status: ContactStatus;
 }

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Schema, Prop, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { COLLECTION_KEYS } from 'src/database/collections';
+import { ServiceStatus } from 'src/modules/service/service.constant';
 
 @Schema()
 export class ServiceEntity extends Base {
@@ -33,7 +34,7 @@ export class ServiceEntity extends Base {
   @Prop()
   price?: number;
 
-  @Prop({ default: 'show' })
+  @Prop({ enum: ServiceStatus, default: ServiceStatus.Draft })
   status: string;
 
   @Prop({ type: Object })

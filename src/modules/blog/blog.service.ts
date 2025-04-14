@@ -124,7 +124,7 @@ export class BlogService {
     const [blogs, total] = await Promise.all([
       this.blogModel
         .find(filter)
-        .populate('category', '_id name')
+        .populate('category', '_id name') // Make sure this populate is working
         .sort({ createdAt: -1 })
         .skip((options.page - 1) * options.limit)
         .limit(options.limit)
@@ -172,6 +172,14 @@ export class BlogService {
     file?: Express.Multer.File
   ): Promise<BlogDocument> {
     const { title, content, description, category, status } = createBlogDto;
+
+    if (!category) {
+      throw new BadRequestException({
+        message: 'Category is required',
+        code: 'CATEGORY_REQUIRED',
+      });
+    }
+
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
     const blogExists = await this.blogModel.findOne({
@@ -181,37 +189,39 @@ export class BlogService {
       throw new BadRequestException(Error.ThisBlogAlreadyExists);
     }
 
-    let imageUrl = '';
-    if (!file) {
-      throw new BadRequestException('File is required'); // Nếu file bắt buộc
+    // Validate category first
+    let validatedCategory: string;
+    try {
+      const valid = await this.categoryService.validateCategories(category);
+      if (!valid) {
+        throw new BadRequestException(Error.CategoryNotFound);
+      }
+      validatedCategory = category;
+    } catch (error) {
+      throw new BadRequestException({
+        message: Error.CategoryValidation,
+        details: error.message,
+      });
     }
 
-    const folderPath = '/blog';
+    // Handle file upload
+    let imageUrl = '';
+    if (!file) {
+      throw new BadRequestException({
+        message: 'Blog thumbnail image is required',
+        code: 'FILE_REQUIRED',
+      });
+    }
+
     try {
-      const uploadedImage = await this.mediaService.uploadFile(
-        folderPath,
-        file
-      );
+      const uploadedImage = await this.mediaService.uploadFile('/blog', file);
       imageUrl = uploadedImage.url;
     } catch (error) {
       this.logger.error('File upload failed:', error);
-      throw new BadRequestException('File upload failed');
-    }
-
-    let categoryIds: string | undefined;
-
-    if (category) {
-      try {
-        const valid = await this.categoryService.validateCategories(category);
-        if (!valid) {
-          throw new BadRequestException(Error.CategoryNotFound);
-        }
-        categoryIds = category;
-      } catch (error) {
-        throw new BadRequestException(
-          `${Error.CategoryValidation}: ${error.message}`
-        );
-      }
+      throw new BadRequestException({
+        message: 'Failed to upload blog image',
+        details: error.message,
+      });
     }
 
     const newBlog = new this.blogModel({
@@ -219,8 +229,8 @@ export class BlogService {
       slug,
       content,
       description,
-      category: categoryIds,
-      file: imageUrl || '',
+      category: validatedCategory, // Use the validated category
+      file: imageUrl,
       status: status || BlogStatus.Draft,
       user: {
         userId: user._id,
@@ -230,7 +240,8 @@ export class BlogService {
     });
 
     await this.redisCacheService.reset();
-    return await newBlog.save();
+    const savedBlog = await newBlog.save();
+    return savedBlog;
   }
 
   /**
@@ -357,8 +368,7 @@ export class BlogService {
       file: blog.file,
       content: blog.content,
       description: blog.description,
-      link: blog.link,
-      category: blog.category,
+      category: blog.category, // Ensure category is included
       status: blog.status,
       createdAt: blog.createdAt ?? new Date(),
       updatedAt: blog.updatedAt ?? new Date(),

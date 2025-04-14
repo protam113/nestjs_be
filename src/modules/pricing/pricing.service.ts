@@ -95,7 +95,9 @@ export class PricingService {
       },
     };
 
-    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    await this.redisCacheService
+      .set(cacheKey, result, 604800)
+      .catch(() => null);
     return result;
   }
 

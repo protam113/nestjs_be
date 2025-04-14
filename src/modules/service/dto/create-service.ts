@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
 
 export class CreateServiceDto {
@@ -15,6 +16,7 @@ export class CreateServiceDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   price?: number;
 
   @IsOptional()

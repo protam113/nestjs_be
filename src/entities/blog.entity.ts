@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Schema, Prop, SchemaFactory } from '@nestjs/mongoose';
 import { CategoryEntity } from './category.entity';
 import { COLLECTION_KEYS } from 'src/database/collections';
+import { BlogStatus } from 'src/modules/blog/blog.constant';
 
 @Schema()
 export class BlogEntity extends Base {
@@ -30,13 +31,13 @@ export class BlogEntity extends Base {
   @Prop()
   link?: string;
 
-  @Prop({ default: 'show' })
+  @Prop({ enum: BlogStatus, default: BlogStatus.Draft })
   status: string;
 
   @Prop({ type: Object })
   user: any;
 
-  @Prop({ type: { type: String, ref: CategoryEntity.name } })
+  @Prop({ type: String, ref: CategoryEntity.name })
   category: string;
 }
 export type BlogDocument = BlogEntity & Document;

@@ -14,9 +14,9 @@ export class CreateBlogDto {
   @IsString()
   description: string;
 
+  @IsNotEmpty()
   @IsString()
-  @IsOptional()
-  category?: string;
+  category: string;
 
-  status?: BlogStatus; // Add this optional field
+  status?: BlogStatus;
 }

@@ -108,6 +108,11 @@ export class ServiceService {
       throw new BadRequestException(Error.ThisServiceAlreadyExists);
     }
 
+    const parsedPrice = Number(price);
+    if (price && isNaN(parsedPrice)) {
+      throw new BadRequestException('Price must be a valid number');
+    }
+
     let imageUrl = '';
     if (!file) {
       throw new BadRequestException('File is required'); // Nếu file bắt buộc
@@ -130,7 +135,7 @@ export class ServiceService {
       slug,
       content,
       description,
-      price: price || undefined,
+      price: parsedPrice,
       link: link || undefined,
       file: imageUrl || '',
       status: ServiceStatus.Draft,
