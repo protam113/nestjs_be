@@ -21,20 +21,17 @@ export class SystemLogController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string
   ) {
-    if (type) {
-      return await this.systemLogService.findByType(type);
-    }
-
     const paginationOptions: PaginationOptionsInterface = {
       page: +page,
       limit: +limit,
     };
 
-    return await this.systemLogService.findAll(
-      paginationOptions,
+    // Always use the findAll method with all filters
+    return await this.systemLogService.findAll(paginationOptions, {
+      type,
       startDate,
-      endDate
-    );
+      endDate,
+    });
   }
 
   @Get('/latest-user-statistic')

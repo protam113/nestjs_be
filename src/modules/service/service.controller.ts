@@ -77,8 +77,8 @@ export class ServiceController {
       status: Status.Success,
       data: {
         user: req.user,
-        id: service._id,
-        title: service.title,
+        id: service.result._id,
+        title: service.result.title,
       },
     });
 

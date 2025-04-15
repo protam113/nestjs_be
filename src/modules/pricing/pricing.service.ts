@@ -23,9 +23,10 @@ import { PricingEntity, PricingDocument } from '../../entities/pricing.entity';
 
 // Components
 import { SlugProvider } from '../slug/slug.provider';
-import { Error, StatusCode } from './pricing,constant';
+import { Error, Message, PricingStatus } from './pricing,constant';
 import { DataResponse } from './responses/data.response';
 import { CreatePricingDto } from './dto/create-pricing.dto';
+import { StatusCode } from 'src/entities/status_code.entity';
 
 @Injectable()
 export class PricingService {
@@ -72,7 +73,8 @@ export class PricingService {
     }
 
     if (status) {
-      filter.status = status;
+      const statusArray = status.split(',').map((s) => s.trim());
+      filter.status = { $in: statusArray };
     }
 
     const pricings = await this.pricingModel
@@ -109,6 +111,29 @@ export class PricingService {
 
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
+    const totalPricingCount = await this.pricingModel.countDocuments();
+    if (totalPricingCount >= 5) {
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.MaximumPricing,
+        error: Error.LimitExceeded,
+      });
+    }
+
+    if (status === PricingStatus.Main) {
+      const existingMain = await this.pricingModel.findOne({
+        status: PricingStatus.Main,
+      });
+
+      if (existingMain) {
+        throw new BadRequestException({
+          statusCode: StatusCode.BadRequest,
+          message: Message.OneMainOnly,
+          error: Error.MainAlreadyExists,
+        });
+      }
+    }
+
     const existingPricing = await this.pricingModel.findOne({
       $or: [{ title }],
     });
@@ -123,7 +148,7 @@ export class PricingService {
       price: price || undefined,
       subData,
       slug,
-      status: 'show',
+      status: status || PricingStatus.Show,
       user: {
         userId: user._id,
         username: user.username,
@@ -171,8 +196,8 @@ export class PricingService {
     if (!pricing) {
       throw new BadRequestException({
         statusCode: StatusCode.NotFound,
-        message: Error.PricingNotFound,
-        error: 'Not Found',
+        message: Message.PricingNotFound,
+        error: Error.NotFound,
       });
     }
 
@@ -189,8 +214,8 @@ export class PricingService {
     if (!pricing) {
       throw new BadRequestException({
         statusCode: StatusCode.NotFound,
-        message: Error.PricingNotFound,
-        error: 'Not Found',
+        message: Message.PricingNotFound,
+        error: Error.NotFound,
       });
     }
     return this.mapToDataResponse(pricing);
@@ -205,16 +230,16 @@ export class PricingService {
     if (!pricing) {
       throw new BadRequestException({
         statusCode: StatusCode.NotFound,
-        message: Error.PricingNotFound,
-        error: 'Not Found',
+        message: Message.PricingNotFound,
+        error: Error.NotFound,
       });
     }
 
     if (!updateData.title) {
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
-        message: 'Title is required',
-        error: 'Bad Request',
+        message: Message.TitleRequired,
+        error: Error.BadRequest,
       });
     }
 
@@ -235,7 +260,7 @@ export class PricingService {
       throw new BadRequestException({
         statusCode: StatusCode.Conflict,
         message: Error.ThisPricingAlreadyExists,
-        error: 'Conflict',
+        error: Error.Conflict,
       });
     }
 
@@ -269,8 +294,8 @@ export class PricingService {
       if (!updatedPricing) {
         throw new BadRequestException({
           statusCode: StatusCode.NotFound,
-          message: Error.PricingNotFound,
-          error: 'Not Found',
+          message: Message.PricingNotFound,
+          error: Error.NotFound,
         });
       }
 
@@ -281,13 +306,13 @@ export class PricingService {
         throw new BadRequestException({
           statusCode: StatusCode.Conflict,
           message: Error.ThisPricingAlreadyExists,
-          error: 'Conflict',
+          error: Error.Conflict,
         });
       }
       throw new BadRequestException({
         statusCode: StatusCode.ServerError,
-        message: 'Internal server error',
-        error: 'Internal Server Error',
+        message: Error.InternalServer,
+        error: Error.InternalServer,
       });
     }
   }
@@ -297,7 +322,7 @@ export class PricingService {
     await this.redisCacheService.reset();
 
     if (!result) {
-      throw new NotFoundException(Error.PricingNotFound);
+      throw new NotFoundException(Message.PricingNotFound);
     }
   }
 }

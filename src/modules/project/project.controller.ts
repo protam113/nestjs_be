@@ -34,26 +34,29 @@ export class ProjectController {
   ) {}
 
   @Get()
-  async getServices(
+  async getProject(
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
-    @Query('status') status?: ProjectStatus
+    @Query('status') status?: ProjectStatus,
+    @Query('service') service?: string
   ) {
-    this.logger.debug('Fetching services with filters:', {
+    this.logger.debug('Fetching project with filters:', {
       startDate,
       endDate,
       page,
       limit,
       status,
+      service,
     });
 
     return this.projectService.findAll(
       { page, limit },
       startDate,
       endDate,
-      status as ProjectStatus
+      status as ProjectStatus,
+      service
     );
   }
 
@@ -65,24 +68,24 @@ export class ProjectController {
     @Req() req,
     @UploadedFile() file: Express.Multer.File
   ) {
-    const service = await this.projectService.create(
+    const project = await this.projectService.create(
       createProjectDto,
       req.user,
       file
     );
 
     await this.systemLogService.log({
-      type: SystemLogType.ServiceCreated,
+      type: SystemLogType.ProjectCreated,
       note: `User ${req.user.email} created a new project post`,
       status: Status.Success,
       data: {
         user: req.user,
-        id: service._id,
-        title: service.title,
+        id: project.result._id,
+        title: project.result.title,
       },
     });
 
-    return service;
+    return project;
   }
 
   @Delete(':id')
@@ -91,7 +94,7 @@ export class ProjectController {
     await this.projectService.delete(id);
 
     await this.systemLogService.log({
-      type: SystemLogType.ServiceDeleted,
+      type: SystemLogType.ProjectDeleted,
       note: `User ${req.user.name} deleted a project`,
       status: Status.Success,
       data: {
@@ -115,8 +118,20 @@ export class ProjectController {
   @UseInterceptors(FileInterceptor(''))
   async updateStatus(
     @Param('id') id: string,
-    @Body('status') status: ProjectStatus
+    @Body('status') status: ProjectStatus,
+    @Req() req
   ) {
+    await this.systemLogService.log({
+      type: SystemLogType.ProjectUpdated,
+      note: `User ${req.user.name} updated a project`,
+      status: Status.Success,
+      data: {
+        user: req.user,
+        serviceId: id,
+        serviceName: req.title,
+      },
+    });
+
     return this.projectService.updateStatus(id, status);
   }
 }

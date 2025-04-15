@@ -38,7 +38,7 @@ export class BlogEntity extends Base {
   user: any;
 
   @Prop({ type: String, ref: CategoryEntity.name })
-  category: string;
+  category: CategoryEntity;
 }
 export type BlogDocument = BlogEntity & Document;
 export const BlogSchema = SchemaFactory.createForClass(BlogEntity);

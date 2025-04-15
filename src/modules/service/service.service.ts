@@ -17,8 +17,11 @@ import { PaginationOptionsInterface } from '../paginate/pagination.options.inter
 import { UserData } from '../user/user.interface';
 import { CreateServiceDto } from './dto/create-service';
 import { DataResponse } from './responses/service.response';
-import { Error, ServiceStatus } from './service.constant';
+import { Error, Message, ServiceStatus } from './service.constant';
 import { buildCacheKey } from '../../utils/cache-key.util';
+import { StatusCode, StatusType } from 'src/entities/status_code.entity';
+import { toDataResponse } from './service.mapper';
+import { CreateServiceResponse } from './responses/create_service.response';
 
 @Injectable()
 export class ServiceService {
@@ -62,19 +65,25 @@ export class ServiceService {
       };
     }
 
-    if (status && Object.values(ServiceStatus).includes(status)) {
-      filter.status = status;
+    if (status) {
+      const statusArray = status.split(',');
+      const validStatuses = statusArray.filter((s) =>
+        Object.values(ServiceStatus).includes(s as ServiceStatus)
+      );
+      if (validStatuses.length > 0) {
+        filter.status = { $in: validStatuses };
+      }
     }
 
     const services = await this.serviceModel
       .find(filter)
       .skip((options.page - 1) * options.limit)
       .limit(options.limit)
-      .lean();
+      .exec();
 
     const total = await this.serviceModel.countDocuments(filter);
 
-    const results = services.map(this.mapToDataResponse);
+    const results = services.map(toDataResponse);
 
     const result = new Pagination<DataResponse>({
       results,
@@ -94,8 +103,9 @@ export class ServiceService {
     createServiceDto: CreateServiceDto,
     user: UserData,
     file?: Express.Multer.File
-  ): Promise<ServiceDocument> {
-    const { title, content, description, price, link } = createServiceDto;
+  ): Promise<CreateServiceResponse> {
+    const { title, content, description, price, link, status } =
+      createServiceDto;
 
     // Generate slug from title
     const slug = this.slugProvider.generateSlug(title, { unique: true });
@@ -105,17 +115,29 @@ export class ServiceService {
     });
 
     if (existing) {
-      throw new BadRequestException(Error.ThisServiceAlreadyExists);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ThisServiceAlreadyExists,
+        error: Error.SERVICE_ALREADY_EXIT,
+      });
     }
 
     const parsedPrice = Number(price);
     if (price && isNaN(parsedPrice)) {
-      throw new BadRequestException('Price must be a valid number');
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ValidPrice,
+        error: Error.PRICE_VALIDATION,
+      });
     }
 
     let imageUrl = '';
     if (!file) {
-      throw new BadRequestException('File is required'); // Nếu file bắt buộc
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.FileRequired,
+        error: Error.FILE_REQUIRED,
+      });
     }
 
     const folderPath = '/service';
@@ -126,8 +148,11 @@ export class ServiceService {
       );
       imageUrl = uploadedImage.url;
     } catch (error) {
-      this.logger.error('File upload failed:', error);
-      throw new BadRequestException('File upload failed');
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.FailedUploadImage,
+        error: Error.FILE_UPLOAD_FAILED,
+      });
     }
 
     const newService = new this.serviceModel({
@@ -138,22 +163,30 @@ export class ServiceService {
       price: parsedPrice,
       link: link || undefined,
       file: imageUrl || '',
-      status: ServiceStatus.Draft,
+      status: status || ServiceStatus.Draft,
       user: {
         userId: user._id,
         username: user.username,
         role: user.role,
       },
     });
+    await newService.save();
     await this.redisCacheService.reset();
-    return await newService.save();
+    return {
+      status: StatusType.Success,
+      result: newService,
+    };
   }
 
   async delete(id: string): Promise<void> {
     const result = await this.serviceModel.findByIdAndDelete(id);
     await this.redisCacheService.reset();
     if (!result) {
-      throw new NotFoundException(Error.ServiceNotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ServiceNotFound,
+        error: Error.NOT_FOUND,
+      });
     }
   }
 
@@ -163,18 +196,25 @@ export class ServiceService {
   ): Promise<ServiceDocument> {
     // Kiểm tra tính hợp lệ của status
     if (!Object.values(ServiceStatus).includes(status)) {
-      throw new BadRequestException('Invalid status value');
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.InvalidStatus,
+        error: Error.INVALID_STATUS,
+      });
     }
 
-    // Tìm và cập nhật blog
     const service = await this.serviceModel.findByIdAndUpdate(
       id,
       { status },
-      { new: true } // Trả về document sau khi cập nhật
+      { new: true }
     );
 
     if (!service) {
-      throw new NotFoundException(Error.ServiceNotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ServiceNotFound,
+        error: Error.NOT_FOUND,
+      });
     }
 
     // Xóa cache để đảm bảo dữ liệu mới nhất
@@ -193,12 +233,16 @@ export class ServiceService {
       this.logger.log(`Cache HIT: ${cacheKey}`);
       return cached;
     }
-    const service = await this.serviceModel.findOne({ slug }).lean();
+    const service = await this.serviceModel.findOne({ slug }).exec();
 
     if (!service) {
-      throw new NotFoundException(Error.ServiceNotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ServiceNotFound,
+        error: Error.NOT_FOUND,
+      });
     }
-    const result = this.mapToDataResponse(service);
+    const result = toDataResponse(service);
 
     await this.redisCacheService
       .set(cacheKey, result, 3600)
@@ -210,28 +254,25 @@ export class ServiceService {
   async validateService(serviceId: string): Promise<boolean> {
     try {
       const service = await this.serviceModel.findById(serviceId).exec();
-      return !!service; // Returns true if service exists, false otherwise
+      return !!service;
     } catch (error) {
       this.logger.error(`Error validating service: ${error.message}`);
       return false;
     }
   }
-  private mapToDataResponse(service: any): DataResponse {
-    return {
-      status: 'success',
-      result: {
-        _id: service._id,
-        title: service.title,
-        file: service.file,
-        slug: service.slug,
-        content: service.content,
-        description: service.description,
-        link: service.link,
-        price: service.price,
-        status: service.status,
-        createdAt: service.createdAt || new Date(),
-        updatedAt: service.updatedAt || new Date(),
-      },
-    };
+
+  async validateServices(serviceIds: string[]): Promise<boolean> {
+    try {
+      const count = await this.serviceModel
+        .countDocuments({
+          _id: { $in: serviceIds },
+        })
+        .exec();
+
+      return count === serviceIds.length;
+    } catch (error) {
+      this.logger.error(`Error validating services: ${error.message}`);
+      return false;
+    }
   }
 }

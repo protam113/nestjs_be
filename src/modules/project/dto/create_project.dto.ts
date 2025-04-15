@@ -1,4 +1,13 @@
-import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsArray,
+  ArrayNotEmpty,
+  IsUUID,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateProjectDto {
   @IsNotEmpty()
@@ -21,6 +30,16 @@ export class CreateProjectDto {
   @IsString()
   testimonial: string;
 
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID('all', { each: true })
+  @Transform(({ value }) =>
+    Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
+  )
+  service: string[];
+
+  @IsNotEmpty()
   @IsString()
   client: string;
 

@@ -2,8 +2,19 @@ export const INITIAL_COUNT_OF_EACH_STATUS = 0;
 
 export enum Error {
   ThisPricingAlreadyExists = 'This pricing already exists',
-  PricingNotFound = 'Pricing not found',
   BadRequest = 'Bad Request',
+  MainAlreadyExists = 'MainAlreadyExists',
+  LimitExceeded = 'LimitExceeded',
+  NotFound = 'Not Found',
+  Conflict = 'Conflict',
+  InternalServer = 'Internal server error',
+}
+
+export enum Message {
+  MaximumPricing = 'The system only allows creating a maximum of 5 pricing packages.',
+  OneMainOnly = 'Only one pricing package with status "main" is allowed.',
+  PricingNotFound = 'Pricing not found',
+  TitleRequired = 'Title is required !',
 }
 
 export enum Success {
@@ -12,13 +23,8 @@ export enum Success {
   Deleted = 'Pricing deleted successfully',
 }
 
-export enum StatusCode {
-  Success = 200,
-  Created = 201,
-  BadRequest = 400,
-  Unauthorized = 401,
-  Forbidden = 403,
-  NotFound = 404,
-  Conflict = 409,
-  ServerError = 500,
+export enum PricingStatus {
+  Show = 'show',
+  Hide = 'hide',
+  Main = 'main',
 }

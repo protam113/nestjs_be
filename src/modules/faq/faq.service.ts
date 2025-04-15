@@ -11,11 +11,13 @@ import { DataResponse } from './responses/data.response';
 import { FaqEntity, FaqDocument } from '../../entities/faq.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
-import { Error, MAX_MAIN_FAQS, Status } from './faq.constant';
+import { Error, MAX_MAIN_FAQS, Message, Status } from './faq.constant';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { UpdateFaqDto } from './dto/update_faq.dto';
 import { CreateFaqDto } from './dto/create_faq.dto';
+import { CreateFaqResponse } from './responses/create_faq.response';
+import { StatusCode, StatusType } from 'src/entities/status_code.entity';
 
 @Injectable()
 export class FaqService {
@@ -30,7 +32,7 @@ export class FaqService {
   async created(
     createFaqDto: CreateFaqDto,
     user: UserData
-  ): Promise<FaqDocument> {
+  ): Promise<CreateFaqResponse> {
     if (!createFaqDto || !createFaqDto.question || !createFaqDto.answer) {
       throw new BadRequestException(Error.QuestionRequired);
     }
@@ -70,9 +72,13 @@ export class FaqService {
     });
 
     try {
+      await newFaq.save();
       await this.redisCacheService.reset();
 
-      return await newFaq.save();
+      return {
+        status: StatusType.Success,
+        result: newFaq,
+      };
     } catch (err) {
       if (err.code === 11000) {
         throw new BadRequestException(Error.QuestionAlreadyExit);
@@ -157,7 +163,11 @@ export class FaqService {
   async findOne(id: string): Promise<FaqDocument> {
     const faq = await this.faqModel.findById(id).lean().exec();
     if (!faq) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.FaqNotFound,
+        error: Error.NotFound,
+      });
     }
     return faq;
   }
@@ -169,7 +179,11 @@ export class FaqService {
   ): Promise<FaqDocument> {
     const faq = await this.faqModel.findById(id);
     if (!faq) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.FaqNotFound,
+        error: Error.NotFound,
+      });
     }
 
     // Include user information in the update
@@ -196,7 +210,11 @@ export class FaqService {
     await this.redisCacheService.reset();
 
     if (!result) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.FaqNotFound,
+        error: Error.NotFound,
+      });
     }
   }
 }

@@ -77,11 +77,6 @@ export class PricingController {
     return this.pricingService.findBySlug(slug);
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.pricingService.findByUuid(id);
-  }
-
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   async update(

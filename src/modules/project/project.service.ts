@@ -1,22 +1,21 @@
 import { SlugProvider } from '../slug/slug.provider';
 import { InjectModel } from '@nestjs/mongoose';
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { UserData } from '../user/user.interface';
 import { CreateProjectDto } from './dto/create_project.dto';
 import { DataResponse } from './responses/data.response';
-import { Error, ProjectStatus } from './project.constant';
+import { Error, Message, ProjectStatus } from './project.constant';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { ProjectDocument, ProjectEntity } from 'src/entities/project.entity';
 import { MediaService } from '../media/media.service';
+import { StatusCode, StatusType } from 'src/entities/status_code.entity';
+import { toDataResponse } from './project.mapper';
+import { CreateProjectResponse } from './responses/create_project.response';
+import { ServiceService } from '../service/service.service';
 
 @Injectable()
 export class ProjectService {
@@ -27,14 +26,16 @@ export class ProjectService {
     private readonly projectModel: Model<ProjectDocument>,
     private readonly slugProvider: SlugProvider,
     private readonly redisCacheService: RedisCacheService,
-    private readonly mediaService: MediaService
+    private readonly mediaService: MediaService,
+    private readonly serviceService: ServiceService
   ) {}
 
   async findAll(
     options: PaginationOptionsInterface,
     startDate?: string,
     endDate?: string,
-    status?: ProjectStatus
+    status?: ProjectStatus,
+    service?: string
   ): Promise<Pagination<DataResponse>> {
     const cacheKey = buildCacheKey('projects', {
       page: options.page,
@@ -42,6 +43,7 @@ export class ProjectService {
       start: startDate,
       end: endDate,
       status: status || 'all',
+      service: service || 'all',
     });
     const cached =
       await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
@@ -60,19 +62,31 @@ export class ProjectService {
       };
     }
 
-    if (status && Object.values(ProjectStatus).includes(status)) {
-      filter.status = status;
+    if (status) {
+      const statusArray = status.split(',');
+      const validStatuses = statusArray.filter((s) =>
+        Object.values(ProjectStatus).includes(s as ProjectStatus)
+      );
+      if (validStatuses.length > 0) {
+        filter.status = { $in: validStatuses };
+      }
     }
 
-    const services = await this.projectModel
+    if (service) {
+      filter.service = service;
+    }
+
+    const projects = await this.projectModel
       .find(filter)
+      .populate('service', '_id title')
+      .sort({ createdAt: -1 })
       .skip((options.page - 1) * options.limit)
       .limit(options.limit)
       .lean();
 
     const total = await this.projectModel.countDocuments(filter);
 
-    const results = services.map(this.mapToDataResponse);
+    const results = projects.map(toDataResponse);
 
     const result = new Pagination<DataResponse>({
       results,
@@ -90,7 +104,11 @@ export class ProjectService {
     const result = await this.projectModel.findByIdAndDelete(id);
     await this.redisCacheService.reset();
     if (!result) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.NotFound,
+        error: Error.NOT_FOUND,
+      });
     }
   }
 
@@ -98,7 +116,7 @@ export class ProjectService {
     createProjectDto: CreateProjectDto,
     user: UserData,
     file?: Express.Multer.File
-  ): Promise<ProjectDocument> {
+  ): Promise<CreateProjectResponse> {
     const {
       title,
       content,
@@ -106,8 +124,16 @@ export class ProjectService {
       link,
       brand_name,
       testimonial,
+      service,
       client,
     } = createProjectDto;
+
+    if (!service) {
+      throw new BadRequestException({
+        message: Message.SERVICE_REQUIRED,
+        code: Error.SERVICE_REQUIRED,
+      });
+    }
 
     // Generate slug from title
     const slug = this.slugProvider.generateSlug(title, { unique: true });
@@ -117,12 +143,41 @@ export class ProjectService {
     });
 
     if (existing) {
-      throw new BadRequestException(Error.ThisProjectAlreadyExists);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ThisProjectAlreadyExists,
+        error: Error.PROJECT_ALREADY_EXISTS,
+      });
+    }
+
+    let serviceIds: string[] | undefined;
+
+    if (service) {
+      try {
+        const isValid = await this.serviceService.validateServices(service);
+        if (!isValid) {
+          throw new BadRequestException({
+            statusCode: StatusCode.BadRequest,
+            message: Message.ServiceNotFound,
+            error: Error.SERVICE_NOT_FOUND,
+          });
+        }
+
+        serviceIds = service;
+      } catch (error) {
+        throw new BadRequestException(
+          `${Message.ServiceValidationFailed}: ${error.message}`
+        );
+      }
     }
 
     let imageUrl = '';
     if (!file) {
-      throw new BadRequestException('File is required'); // Nếu file bắt buộc
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.FileRequired,
+        error: Error.FILE_REQUIRED,
+      });
     }
 
     const folderPath = '/projects';
@@ -133,8 +188,11 @@ export class ProjectService {
       );
       imageUrl = uploadedImage.url;
     } catch (error) {
-      this.logger.error('File upload failed:', error);
-      throw new BadRequestException('File upload failed');
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.FileUploadFailed,
+        error: Error.FILE_UPLOAD_FAILED,
+      });
     }
 
     const newProject = new this.projectModel({
@@ -144,6 +202,7 @@ export class ProjectService {
       description,
       brand_name,
       file: imageUrl || '',
+      service: serviceIds,
       testimonial,
       client,
       link: link || undefined,
@@ -154,31 +213,47 @@ export class ProjectService {
         role: user.role,
       },
     });
+
+    await newProject.save();
     await this.redisCacheService.reset();
 
-    return await newProject.save();
+    return {
+      status: StatusType.Success,
+      result: newProject,
+    };
   }
 
-  async findBySlug(slug: string): Promise<DataResponse> {
+  async findBySlug(slug: string): Promise<CreateProjectResponse> {
     const cacheKey = `project_${slug}`;
-    const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
+    const cached =
+      await this.redisCacheService.get<CreateProjectResponse>(cacheKey);
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
       return cached;
     }
-    const service = await this.projectModel.findOne({ slug }).lean();
+    const project = await this.projectModel
+      .findOne({ slug })
+      .populate('service', '_id title') // Populate service
+      .exec();
 
-    if (!service) {
-      throw new NotFoundException(Error.NotFound);
+    if (!project) {
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.NotFound,
+        error: Error.NOT_FOUND,
+      });
     }
-    const result = this.mapToDataResponse(service);
+    const result = toDataResponse(project);
 
     await this.redisCacheService
       .set(cacheKey, result, 3600)
       .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
 
-    return result;
+    return {
+      status: StatusType.Success,
+      result: project,
+    };
   }
 
   async validateProject(serviceId: string): Promise<boolean> {
@@ -207,7 +282,11 @@ export class ProjectService {
     );
 
     if (!project) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.NotFound,
+        error: Error.NOT_FOUND,
+      });
     }
 
     await this.redisCacheService
@@ -215,26 +294,5 @@ export class ProjectService {
       .catch((err) => this.logger.error('Failed to clear cache:', err));
 
     return project;
-  }
-
-  private mapToDataResponse(project: any): DataResponse {
-    return {
-      status: 'success',
-      result: {
-        _id: project._id,
-        title: project.title,
-        slug: project.slug,
-        file: project.file,
-        content: project.content,
-        description: project.description,
-        link: project.link,
-        brand_name: project.brand_name,
-        client: project.client,
-        testimonial: project.testimonial,
-        status: project.status,
-        createdAt: project.createdAt || new Date(),
-        updatedAt: project.updatedAt || new Date(),
-      },
-    };
   }
 }

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Schema, Prop, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { COLLECTION_KEYS } from 'src/database/collections';
+import { ServiceEntity } from './service.entity';
 
 export enum Status {
   Show = 'show',
@@ -39,6 +40,9 @@ export class ProjectEntity extends Base {
 
   @Prop({ required: true })
   testimonial: string;
+
+  @Prop({ type: [String], ref: ServiceEntity.name })
+  service: string[];
 
   @Prop({ required: true })
   client: string;

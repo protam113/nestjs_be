@@ -11,14 +11,16 @@ import {
   Req,
   BadRequestException,
   UseInterceptors,
+  Delete,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
 import { CategoryService } from './category.service';
 import { SystemLogService } from '../system-log/system-log.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
-import { StatusCode } from './category.constant';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { StatusCode } from 'src/entities/status_code.entity';
+import { Error, Message } from './category.constant';
 
 @Controller('category')
 export class CategoryController {
@@ -77,8 +79,8 @@ export class CategoryController {
     if (!category) {
       throw new BadRequestException({
         statusCode: StatusCode.ServerError,
-        message: 'Category not found',
-        error: 'Not Found',
+        message: Message.CategoryFound,
+        error: Error.NOT_FOUND,
       });
     }
     return category;
@@ -110,5 +112,23 @@ export class CategoryController {
     });
 
     return updatedCategory;
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  async delete(@Param('id') id: string, @Req() req) {
+    await this.categoryService.delete(id);
+
+    await this.systemLogService.log({
+      type: SystemLogType.DeletedContact,
+      note: `User ${req.user.name} deleted a category`,
+      status: Status.Success,
+      data: {
+        user: req.user,
+        blogId: id,
+      },
+    });
+
+    return { message: 'Category deleted successfully' };
   }
 }

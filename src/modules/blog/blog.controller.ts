@@ -108,8 +108,8 @@ export class BlogController {
       status: Status.Success,
       data: {
         user: req.user,
-        id: blog._id,
-        title: blog.title,
+        id: blog.result._id,
+        title: blog.result.title,
       },
     });
 

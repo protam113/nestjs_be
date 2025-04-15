@@ -8,6 +8,7 @@ import { ProjectService } from './project.service';
 import { ProjectController } from './project.controller';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
+import { ServiceModule } from '../service/service.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AuthModule } from '../auth/auth.module';
     RedisCacheModule,
     MediaModule,
     AuthModule,
+    ServiceModule,
   ],
   controllers: [ProjectController],
   providers: [ProjectService, SlugProvider],

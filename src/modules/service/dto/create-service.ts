@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
+import { ServiceStatus } from '../service.constant';
 
 export class CreateServiceDto {
   @IsNotEmpty()
@@ -22,4 +23,6 @@ export class CreateServiceDto {
   @IsOptional()
   @IsString()
   link?: string;
+
+  status?: ServiceStatus;
 }

@@ -71,13 +71,13 @@ export class ContactController {
 
     await this.systemLogService.log({
       type: SystemLogType.SentMail,
-      note: `Contact form submitted by ${contact.name}`,
+      note: `Contact form submitted by ${contact.result.name}`,
       status: Status.Success,
       data: {
-        id: contact._id,
-        name: contact.name,
-        mail: contact.email,
-        phone: contact.phone_number,
+        id: contact.result._id,
+        name: contact.result.name,
+        mail: contact.result.email,
+        phone: contact.result.phone_number,
       },
     });
 
@@ -103,8 +103,8 @@ export class ContactController {
       note: `Contact status updated by ${req.user.username}`,
       status: Status.Success,
       data: {
-        id: contact._id,
-        status: contact.status,
+        id: contact.result._id,
+        status: contact.result.status,
         updatedBy: req.user.username,
       },
     });

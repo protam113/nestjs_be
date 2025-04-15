@@ -29,21 +29,22 @@ export class SystemLogService {
     }
   }
 
-  async findByType(type: SystemLogType): Promise<SystemLog[]> {
-    return this.systemLogModel.find({ type }).sort({ loggedAt: -1 }).exec();
-  }
-
   async findAll(
     options: PaginationOptionsInterface,
-    startDate?: string,
-    endDate?: string
+    filters: {
+      type?: SystemLogType;
+      startDate?: string;
+      endDate?: string;
+    } = {}
   ): Promise<Pagination<SystemLogResponse>> {
+    const { type, startDate, endDate } = filters;
+
     const cacheKey = buildCacheKey('logs', {
       page: options.page,
       limit: options.limit,
       start: startDate,
       end: endDate,
-      // Remove status from cache key since it's not a parameter
+      type, // Add type to cache key
     });
 
     const cached =
@@ -62,6 +63,11 @@ export class SystemLogService {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       };
+    }
+
+    // Add type filter if provided
+    if (type) {
+      filter.type = type;
     }
 
     const logs = await this.systemLogModel

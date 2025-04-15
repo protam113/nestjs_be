@@ -1,17 +1,17 @@
-interface Service {
-  _id: string;
-  title: string;
-}
+import { ContactStatus } from '../contact.constant';
 
 export interface DataResponse {
   _id: string;
+  name: string;
   email: string;
   phone_number: string;
-  name: string;
-  link?: string;
-  status: string;
   message: string;
-  service?: Service;
+  link?: string;
+  service?: {
+    _id: string;
+    name: string;
+  };
+  status: ContactStatus;
   createdAt: Date;
   updatedAt: Date;
 }

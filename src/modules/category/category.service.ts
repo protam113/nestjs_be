@@ -8,11 +8,12 @@ import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { CategoryDocument } from './category.interface';
 import { DataResponse } from './responses/data.response';
-import { Error, StatusCode } from './category.constant';
+import { Error, Message } from './category.constant';
 import { UserData } from '../user/user.interface';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
+import { StatusCode } from 'src/entities/status_code.entity';
 
 @Injectable()
 export class CategoryService {
@@ -175,6 +176,19 @@ export class CategoryService {
     } catch (error) {
       this.logger.error(`Error validating service: ${error.message}`);
       return false;
+    }
+  }
+
+  async delete(_id: string): Promise<void> {
+    const result = await this.categoryModel.findByIdAndDelete(_id);
+    await this.redisCacheService.reset();
+
+    if (!result) {
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.CategoryNotFound,
+        error: Error.CategoryNotFound,
+      });
     }
   }
 

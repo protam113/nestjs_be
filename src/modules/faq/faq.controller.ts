@@ -40,8 +40,8 @@ export class FaqController {
 
       data: {
         user: req.user,
-        faqId: faq._id,
-        title: faq.question,
+        faqId: faq.result._id,
+        title: faq.result.question,
       },
     });
 

@@ -20,14 +20,19 @@ import { UserData } from '../user/user.interface';
 // Entity
 import { BlogDocument, BlogEntity } from '../../entities/blog.entity';
 
-// Components
+// Service
 import { SlugProvider } from '../slug/slug.provider';
 import { CategoryService } from '../category/category.service';
+import { MediaService } from '../media/media.service';
+
+// Components
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { DataResponse, DetailResponse } from './responses/data.response';
-import { Error } from './blog.constant';
+import { Error, Message } from './blog.constant';
 import { BlogStatus } from './blog.constant';
-import { MediaService } from '../media/media.service';
+import { toDataResponse } from './blog.mapper';
+import { CreateBlogResponse } from './responses/create_blog.response';
+import { StatusCode, StatusType } from 'src/entities/status_code.entity';
 
 @Injectable()
 
@@ -89,7 +94,7 @@ export class BlogService {
     options: PaginationOptionsInterface,
     startDate?: string,
     endDate?: string,
-    status?: BlogStatus,
+    status?: string | BlogStatus,
     category?: string
   ): Promise<Pagination<DataResponse>> {
     const cacheKey = buildCacheKey('blogs', {
@@ -113,26 +118,31 @@ export class BlogService {
     if (startDate && endDate)
       filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
 
-    if (status && Object.values(BlogStatus).includes(status))
-      filter.status = status;
+    if (status) {
+      const statusArray = status.split(',');
+      const validStatuses = statusArray.filter((s) =>
+        Object.values(BlogStatus).includes(s as BlogStatus)
+      );
+      if (validStatuses.length > 0) {
+        filter.status = { $in: validStatuses };
+      }
+    }
 
     if (category) {
-      // Remove ObjectId conversion since we're using UUID
       filter.category = category;
     }
 
     const [blogs, total] = await Promise.all([
       this.blogModel
         .find(filter)
-        .populate('category', '_id name') // Make sure this populate is working
+        .populate('category', '_id name')
         .sort({ createdAt: -1 })
         .skip((options.page - 1) * options.limit)
-        .limit(options.limit)
-        .lean(),
+        .limit(options.limit),
       this.blogModel.countDocuments(filter),
     ]);
 
-    const results = blogs.map(this.mapToDataResponse);
+    const results = blogs.map(toDataResponse);
     const result = new Pagination<DataResponse>({
       results,
       total,
@@ -141,7 +151,11 @@ export class BlogService {
       current_page: options.page,
     });
 
-    await this.redisCacheService.set(cacheKey, result, 7200).catch(() => null);
+    await this.redisCacheService
+      .set(cacheKey, result, 7200)
+      .catch((err) =>
+        this.logger.warn(`Failed to cache blog list: ${err.message}`)
+      );
     return result;
   }
 
@@ -170,13 +184,13 @@ export class BlogService {
     createBlogDto: CreateBlogDto,
     user: UserData,
     file?: Express.Multer.File
-  ): Promise<BlogDocument> {
+  ): Promise<CreateBlogResponse> {
     const { title, content, description, category, status } = createBlogDto;
 
     if (!category) {
       throw new BadRequestException({
-        message: 'Category is required',
-        code: 'CATEGORY_REQUIRED',
+        message: Message.CATEGORY_REQUIRED,
+        code: Error.CATEGORY_REQUIRED,
       });
     }
 
@@ -186,7 +200,11 @@ export class BlogService {
       $or: [{ title }, { slug }],
     });
     if (blogExists) {
-      throw new BadRequestException(Error.ThisBlogAlreadyExists);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ThisBlogAlreadyExists,
+        error: Error.BLOG_ALREADY_EXISTS,
+      });
     }
 
     // Validate category first
@@ -194,13 +212,14 @@ export class BlogService {
     try {
       const valid = await this.categoryService.validateCategories(category);
       if (!valid) {
-        throw new BadRequestException(Error.CategoryNotFound);
+        throw new BadRequestException(Message.CategoryNotFound);
       }
       validatedCategory = category;
     } catch (error) {
       throw new BadRequestException({
-        message: Error.CategoryValidation,
-        details: error.message,
+        statusCode: StatusCode.BadRequest,
+        message: Message.CategoryValidation,
+        error: Error.CATEGORY_VALIDATION,
       });
     }
 
@@ -208,8 +227,9 @@ export class BlogService {
     let imageUrl = '';
     if (!file) {
       throw new BadRequestException({
-        message: 'Blog thumbnail image is required',
-        code: 'FILE_REQUIRED',
+        statusCode: StatusCode.BadRequest,
+        message: Message.BlogThumbnailRequired,
+        error: Error.FILE_REQUIRED,
       });
     }
 
@@ -217,9 +237,8 @@ export class BlogService {
       const uploadedImage = await this.mediaService.uploadFile('/blog', file);
       imageUrl = uploadedImage.url;
     } catch (error) {
-      this.logger.error('File upload failed:', error);
       throw new BadRequestException({
-        message: 'Failed to upload blog image',
+        message: Message.FailedUploadImage,
         details: error.message,
       });
     }
@@ -229,7 +248,7 @@ export class BlogService {
       slug,
       content,
       description,
-      category: validatedCategory, // Use the validated category
+      category: validatedCategory,
       file: imageUrl,
       status: status || BlogStatus.Draft,
       user: {
@@ -241,7 +260,10 @@ export class BlogService {
 
     await this.redisCacheService.reset();
     const savedBlog = await newBlog.save();
-    return savedBlog;
+    return {
+      status: StatusType.Success,
+      result: savedBlog,
+    };
   }
 
   /**
@@ -262,7 +284,12 @@ export class BlogService {
   async delete(id: string): Promise<void> {
     const result = await this.blogModel.findByIdAndDelete(id);
     await this.redisCacheService.reset();
-    if (!result) throw new NotFoundException(Error.BlogNotFound);
+    if (!result)
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.BlogNotFound,
+        error: Error.BLOG_ALREADY_EXISTS,
+      });
   }
 
   /**
@@ -293,11 +320,11 @@ export class BlogService {
 
     const blog = await this.blogModel
       .findOne({ slug })
-      .populate('category', 'name')
-      .lean();
-    if (!blog) throw new NotFoundException(Error.BlogNotFound);
+      .populate('category', '_id name')
+      .exec();
+    if (!blog) throw new NotFoundException(Message.BlogNotFound);
 
-    const result = this.mapToDataResponse(blog);
+    const result = toDataResponse(blog);
 
     await this.redisCacheService
       .set(cacheKey, result, 10800)
@@ -328,7 +355,7 @@ export class BlogService {
   async updateStatus(id: string, status: BlogStatus): Promise<BlogDocument> {
     // Kiểm tra tính hợp lệ của status
     if (!Object.values(BlogStatus).includes(status)) {
-      throw new BadRequestException('Invalid status value');
+      throw new BadRequestException(Message.InvalidStatus);
     }
 
     // Tìm và cập nhật blog
@@ -339,7 +366,7 @@ export class BlogService {
     );
 
     if (!blog) {
-      throw new NotFoundException(Error.BlogNotFound);
+      throw new NotFoundException(Message.BlogNotFound);
     }
 
     // Xóa cache để đảm bảo dữ liệu mới nhất
@@ -348,30 +375,5 @@ export class BlogService {
       .catch((err) => this.logger.error('Failed to clear cache:', err));
 
     return blog;
-  }
-
-  /**
-   * @private
-   * @summary Maps a blog document to a standardized response DTO
-   *
-   * @param {any} blog - The raw blog document (from database)
-   * @returns {DataResponse} - The transformed blog data for client consumption
-   *
-   * @note This is an internal helper, used to abstract away database structure
-   */
-
-  private mapToDataResponse(blog: any): DataResponse {
-    return {
-      _id: blog._id,
-      title: blog.title,
-      slug: blog.slug,
-      file: blog.file,
-      content: blog.content,
-      description: blog.description,
-      category: blog.category, // Ensure category is included
-      status: blog.status,
-      createdAt: blog.createdAt ?? new Date(),
-      updatedAt: blog.updatedAt ?? new Date(),
-    };
   }
 }

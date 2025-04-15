@@ -7,23 +7,43 @@ import { COLLECTION_KEYS } from 'src/database/collections';
 export enum SystemLogType {
   UserStatistic = 'USER_STATISTIC',
   CreateManager = 'CREATE_MANAGER',
-  FaqCreated = 'FAQ_CREATED',
-  CategoryCreated = 'CATEGORY_CREATED',
-  BlogCreated = 'BLOG_CREATED',
-  ServiceCreated = 'SERVICE_CREATED',
-  ServiceDeleted = 'SERVICE_DELETED',
-  PricingCreated = 'PRICING_CREATED',
-  BlogUpdated = 'BLOG_UPDATED',
-  BlogDeleted = 'BLOG_DELETED',
-  CategoryUpdated = 'CATEGORY_UPDATED',
   DeletedUser = 'DELETED_USER',
-  DeletedContact = 'DELETED_CONTACT',
-  PricingDeleted = 'PRICING_DELETED',
-  PricingUpdated = 'PRICING_UPDATED',
-  FaqUpdated = 'FAQ_UPDATED',
-  FaqDeleted = 'FAQ_DELETED',
   UpdateStatus = 'UPDATE_STATUS',
   SentMail = 'SENT_MAIL',
+
+  // Contact
+  DeletedContact = 'DELETED_CONTACT',
+
+  // Faq
+  FaqCreated = 'FAQ_CREATED',
+  FaqUpdated = 'FAQ_UPDATED',
+  FaqDeleted = 'FAQ_DELETED',
+
+  // Pricing
+  PricingDeleted = 'PRICING_DELETED',
+  PricingUpdated = 'PRICING_UPDATED',
+  PricingCreated = 'PRICING_CREATED',
+
+  // Blog
+  BlogCreated = 'BLOG_CREATED',
+  BlogUpdated = 'BLOG_UPDATED',
+  BlogDeleted = 'BLOG_DELETED',
+
+  // Category
+  CategoryCreated = 'CATEGORY_CREATED',
+  CategoryUpdated = 'CATEGORY_UPDATED',
+
+  // Service
+  ServiceCreated = 'SERVICE_CREATED',
+  ServiceDeleted = 'SERVICE_DELETED',
+
+  // Project
+  ProjectCreated = 'PROJECT_CREATED',
+  ProjectUpdated = 'PROJECT_UPDATED',
+  ProjectDeleted = 'PROJECT_DELETED',
+
+  // Seo
+  SeoUpdated = 'SEO_UPDATED',
 }
 
 export enum Status {

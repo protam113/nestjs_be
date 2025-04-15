@@ -12,7 +12,7 @@ import { ContactDocument, ContactEntity } from '../../entities/contact.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 
-import { Error, ContactStatus } from './contact.constant';
+import { Error, ContactStatus, Message } from './contact.constant';
 import { EmailService } from '../../services/email.service';
 import { DataResponse } from './responses/data.response';
 import { CreateContactDto } from './dto/create-contact.dto';
@@ -21,6 +21,10 @@ import { UserData } from '../user/user.interface';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { ServiceService } from '../service/service.service';
+import { toDataResponse } from './contact.mapper';
+import { CreateContactResponse } from './responses/create_contact.response';
+import { StatusCode, StatusType } from 'src/entities/status_code.entity';
+import { UpdateContactResponse } from './responses/update_contact.respone';
 
 @Injectable()
 export class ContactService {
@@ -95,7 +99,7 @@ export class ContactService {
         .find(filter)
         .populate({
           path: 'service',
-          select: '_id title',
+          select: '_id title', // Correct - using 'title' as it exists in ServiceEntity
           model: 'ServiceEntity',
         })
         .sort({ createdAt: 'desc' }) // Changed to 'desc' for newest first
@@ -105,7 +109,7 @@ export class ContactService {
       this.contactModel.countDocuments(filter),
     ]);
 
-    const results = contacts.map(this.mapToDataResponse);
+    const results = contacts.map(toDataResponse);
     const result = new Pagination<DataResponse>({
       results,
       total,
@@ -121,7 +125,11 @@ export class ContactService {
   async findOne(_id: string): Promise<ContactDocument> {
     const faq = await this.contactModel.findById(_id).lean().exec();
     if (!faq) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ContactNotFound,
+        error: Error.CONTACT_NOT_FOUND,
+      });
     }
     return faq;
   }
@@ -131,18 +139,24 @@ export class ContactService {
     await this.redisCacheService.reset();
 
     if (!result) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ContactNotFound,
+        error: Error.CONTACT_NOT_FOUND,
+      });
     }
   }
 
-  async created(createContactDto: CreateContactDto): Promise<ContactDocument> {
+  async created(
+    createContactDto: CreateContactDto
+  ): Promise<CreateContactResponse> {
     if (
       !createContactDto ||
       !createContactDto.name ||
       !createContactDto.email ||
       !createContactDto.message
     ) {
-      throw new BadRequestException(Error.DataRequired);
+      throw new BadRequestException(Message.DataRequired);
     }
     const { service, phone_number, email, message, name } = createContactDto;
 
@@ -153,12 +167,12 @@ export class ContactService {
       try {
         const valid = await this.serviceService.validateService(service);
         if (!valid) {
-          throw new BadRequestException(Error.ServiceNotFound);
+          throw new BadRequestException(Message.ServiceNotFound);
         }
         serviceId = service;
       } catch (error) {
         throw new BadRequestException(
-          `${Error.ServiceValidation}: ${error.message}`
+          `${Message.ServiceValidation}: ${error.message}`
         );
       }
     }
@@ -182,17 +196,24 @@ export class ContactService {
       });
     } catch (error) {}
     await this.redisCacheService.reset();
-    return savedContact;
+    return {
+      status: StatusType.Success,
+      result: savedContact,
+    };
   }
 
   async update(
     id: string,
     updateContactDto: UpdateContactDto,
     user: UserData
-  ): Promise<ContactDocument> {
+  ): Promise<UpdateContactResponse> {
     const contact = await this.contactModel.findById(id);
     if (!contact) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ContactNotFound,
+        error: Error.CONTACT_NOT_FOUND,
+      });
     }
 
     const updatedContact = await this.contactModel
@@ -214,34 +235,17 @@ export class ContactService {
       .exec();
 
     if (!updatedContact) {
-      throw new NotFoundException(Error.NotFound);
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ContactNotFound,
+        error: Error.CONTACT_NOT_FOUND,
+      });
     }
+    await updatedContact.save();
     await this.redisCacheService.reset();
-    return updatedContact;
-  }
-
-  /**
-   * @private
-   * @summary Maps a contact document to a standardized response DTO
-   *
-   * @param {any} contact - The raw contact document (from database)
-   * @returns {DataResponse} - The transformed contact data for client consumption
-   *
-   * @note This is an internal helper, used to abstract away database structure
-   */
-
-  private mapToDataResponse(contact: any): DataResponse {
     return {
-      _id: contact._id,
-      name: contact.name,
-      email: contact.email,
-      phone_number: contact.phone_number,
-      message: contact.message,
-      link: contact.link,
-      service: contact.service,
-      status: contact.status,
-      createdAt: contact.createdAt ?? new Date(),
-      updatedAt: contact.updatedAt ?? new Date(),
+      status: StatusType.Success,
+      result: updatedContact,
     };
   }
 }
