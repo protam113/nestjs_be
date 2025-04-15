@@ -11,6 +11,7 @@ import {
   Query,
   Delete,
   Param,
+  UseInterceptors,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guard/jwt-auth.guard';
 
@@ -24,6 +25,7 @@ import { RolesGuard } from '../auth/guards/RolesGuard';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('users')
 export class UserController {
@@ -63,11 +65,8 @@ export class UserController {
   @Post('manager')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.Admin)
-  async createManager(
-    @Body() body: CreateManagerDto,
-    @Param('id') userId: string,
-    @Req() req
-  ) {
+  @UseInterceptors(FileInterceptor(''))
+  async createManager(@Body() body: CreateManagerDto, @Req() req) {
     const manager = await this.userService.createManagerUser(body, req.user);
 
     await this.systemLogService.log({

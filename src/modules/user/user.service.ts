@@ -3,7 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../../entities/user.entity';
 import { UserError, UserSuccess } from './user.constant';
-import type { UserData, UserResponse } from './user.interface';
+import type {
+  UserData,
+  UserDataResponse,
+  UserResponse,
+} from './user.interface';
 import { Role } from '../../common/enums/role.enum';
 import { CreateManagerDto } from './dto/create-manager.dto';
 import { RedisCacheService } from '../cache/redis-cache.service';
@@ -14,6 +18,8 @@ import { EmailPasswordService } from 'src/services/email_password.service';
 import { randomBytes } from 'crypto';
 import { VerificationCode } from './interfaces/verification-code.interface';
 import { EmailRegisterService } from 'src/services/email_register.service';
+import { toDataResponse } from './user.mapper';
+import { StatusType } from 'src/entities/status_code.entity';
 
 @Injectable()
 export class UserService {
@@ -38,7 +44,7 @@ export class UserService {
     searchQuery?: string,
     page: number = 1,
     limit: number = 10
-  ): Promise<Pagination<UserResponse>> {
+  ): Promise<Pagination<Omit<User, 'password'>>> {
     const cacheKey = buildCacheKey('users', {
       page,
       limit,
@@ -49,7 +55,9 @@ export class UserService {
     });
 
     const cached =
-      await this.redisCacheService.get<Pagination<UserResponse>>(cacheKey);
+      await this.redisCacheService.get<Pagination<Omit<User, 'password'>>>(
+        cacheKey
+      );
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
@@ -79,26 +87,29 @@ export class UserService {
 
     const users = await this.userModel
       .find(filter)
+      .select(
+        '_id name username role email phoneNumber password createdAt updatedAt'
+      ) // Explicitly select fields
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
     const total = await this.userModel.countDocuments(filter);
 
-    const results = users.map((user) => ({
-      status: 'success',
-      message: UserSuccess.UserRetrieved,
-      data: {
-        _id: user._id,
-        name: user.name,
-        username: user.username,
-        role: user.role,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-      },
-    })) as UserResponse[];
+    // Convert the users to the correct type and omit password
+    const results = users.map((user: any) => {
+      // Use type assertion for now
+      const mappedUser = toDataResponse(user);
+      const { password, ...userWithoutPassword } = mappedUser;
+      return {
+        ...userWithoutPassword,
+        role: user.role as Role,
+        createdAt: new Date(user.createdAt), // Convert to Date object
+        updatedAt: new Date(user.updatedAt), // Convert to Date object
+      };
+    });
 
-    const result = new Pagination<UserResponse>({
+    const result = new Pagination<Omit<User, 'password'>>({
       results,
       total,
       total_page: Math.ceil(total / limit),
@@ -147,24 +158,19 @@ export class UserService {
       // Continue with the response even if email fails
     }
     const savedUser = await newUser.save();
+    await this.redisCacheService.reset();
 
-    return this.mapToUserResponse(savedUser);
-  }
-
-  private mapToUserResponse(user: any): UserResponse {
-    const { _id, name, username, role, email, phoneNumber } = user;
     return {
-      status: 'success',
-      message: UserSuccess.UserRetrieved,
+      message: UserSuccess.UserCreated,
       data: {
-        _id,
-        name,
-        username,
-        role,
-        email,
-        phoneNumber,
+        _id: savedUser._id,
+        name: savedUser.name,
+        username: savedUser.username,
+        role: savedUser.role,
+        email: savedUser.email,
+        phoneNumber: savedUser.phoneNumber,
       },
-    };
+    } as UserResponse;
   }
 
   async getUserStatistic() {
@@ -210,12 +216,12 @@ export class UserService {
     });
   }
 
-  async findByUuid(_id: string): Promise<UserResponse | null> {
+  async findByUuid(_id: string): Promise<UserDataResponse | null> {
     // Create cache key using only the user ID
     const cacheKey = buildCacheKey('user', { id: _id });
 
     // Try to get from cache first
-    const cached = await this.redisCacheService.get<UserResponse>(cacheKey);
+    const cached = await this.redisCacheService.get<UserDataResponse>(cacheKey);
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
@@ -229,14 +235,30 @@ export class UserService {
     }
 
     // Map to response format
-    const response = this.mapToUserResponse(user);
+    const response = toDataResponse(user);
+
+    // Create a properly typed UserResponse object
+    const userResponse: UserDataResponse = {
+      status: 'success',
+      message: 'User found successfully',
+      data: {
+        _id: response._id,
+        name: response.name,
+        username: response.username,
+        role: response.role,
+        email: response.email,
+        phoneNumber: response.phoneNumber,
+        createdAt: response.createdAt,
+        updatedAt: response.updatedAt,
+      },
+    };
 
     // Save to cache for 1 hour (3600 seconds)
     await this.redisCacheService
-      .set(cacheKey, response, 3600)
+      .set(cacheKey, userResponse, 3600)
       .catch((err) => this.logger.error('Cache set failed:', err));
 
-    return response;
+    return userResponse;
   }
 
   async deleteManagerById(
@@ -254,7 +276,7 @@ export class UserService {
 
     await this.userModel.findByIdAndDelete(userId);
 
-    this.logger.log(`Deleted manager with ID: ${userId}`);
+    await this.redisCacheService.reset();
 
     return {
       status: 'success',

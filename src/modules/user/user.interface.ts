@@ -17,6 +17,21 @@ export interface UserResponse {
   data: Omit<User, 'password'>;
 }
 
+export interface UserDataResponse {
+  status: string;
+  message: string;
+  data: {
+    _id: string;
+    name: string;
+    username: string;
+    role: string;
+    email: string;
+    phoneNumber: string;
+    createdAt?: Date;
+    updatedAt?: Date;
+  };
+}
+
 export interface AuthResponse {
   data: UserResponse;
 }

@@ -20,4 +20,5 @@ export enum UserSuccess {
   PasswordUpdated = 'Password updated successfully',
   VerificationSent = 'Verification code sent to your email',
   UserRetrieved = 'User retrieved successfully',
+  UserCreated = 'User created successfully',
 }
