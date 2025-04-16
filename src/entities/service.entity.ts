@@ -34,6 +34,9 @@ export class ServiceEntity extends Base {
   @Prop()
   price?: number;
 
+  @Prop({ default: 0 })
+  views: number;
+
   @Prop({ enum: ServiceStatus, default: ServiceStatus.Draft })
   status: string;
 

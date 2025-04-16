@@ -3,6 +3,11 @@ interface Category {
   name: string;
 }
 
+interface User {
+  _id: string;
+  name: string;
+}
+
 export interface DataResponse {
   _id: string;
   title: string;
@@ -11,6 +16,8 @@ export interface DataResponse {
   content: string;
   description: string;
   link?: string;
+  user: User;
+  views: number;
   category: Category;
   status: string;
   createdAt: Date;
@@ -27,6 +34,9 @@ export interface DetailResponse {
     content: string;
     description: string;
     category: Category;
+    views: number;
+    user: User;
+    link?: string;
     status: string;
     createdAt: Date;
     updatedAt: Date;

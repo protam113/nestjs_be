@@ -34,6 +34,9 @@ export class BlogEntity extends Base {
   @Prop({ enum: BlogStatus, default: BlogStatus.Draft })
   status: string;
 
+  @Prop({ default: 0 })
+  views: number;
+
   @Prop({ type: Object })
   user: any;
 

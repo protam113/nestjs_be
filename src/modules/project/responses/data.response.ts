@@ -20,6 +20,7 @@ export interface DataResponse {
   brand_name: string;
   testimonial: string;
   user: User;
+  views: number;
   client: string;
   status: string;
   createdAt: Date;

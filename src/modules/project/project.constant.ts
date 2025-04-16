@@ -24,6 +24,7 @@ export enum Message {
   SERVICE_REQUIRED = 'Service is required',
   ServiceNotFound = 'Service not found',
   ServiceValidationFailed = 'Service validation failed',
+  InvalidViewsCount = 'Invalid views count',
 }
 
 export enum ProjectStatus {

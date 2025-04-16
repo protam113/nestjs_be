@@ -50,6 +50,9 @@ export class ProjectEntity extends Base {
   @Prop()
   link?: string;
 
+  @Prop({ default: 0 })
+  views: number;
+
   @Prop({ enum: Status, default: Status.Draft })
   status: string;
 

@@ -35,6 +35,7 @@ import { PricingModule } from '../modules/pricing/pricing.module';
 import { SeoModule } from 'src/modules/seo/seo.module';
 import { ProjectModule } from 'src/modules/project/project.module';
 import { MediaModule } from 'src/modules/media/media.module';
+import { TrackingModule } from 'src/modules/tracking/tracking.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { MediaModule } from 'src/modules/media/media.module';
     ContactModule,
     PricingModule,
     MediaModule,
+    TrackingModule,
   ],
   controllers: [AppBaseController],
   providers: [
@@ -155,6 +157,10 @@ export class AppModule implements NestModule {
         {
           path: '/project/:slug',
           method: RequestMethod.GET,
+        },
+        {
+          path: '/tracking/track',
+          method: RequestMethod.POST,
         }
       )
       .forRoutes('*');

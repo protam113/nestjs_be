@@ -78,6 +78,7 @@ export class ServiceService {
     const services = await this.serviceModel
       .find(filter)
       .skip((options.page - 1) * options.limit)
+      .sort({ createdAt: -1 })
       .limit(options.limit)
       .exec();
 
@@ -216,11 +217,7 @@ export class ServiceService {
         error: Error.NOT_FOUND,
       });
     }
-
-    // Xóa cache để đảm bảo dữ liệu mới nhất
-    await this.redisCacheService
-      .reset()
-      .catch((err) => this.logger.error('Failed to clear cache:', err));
+    await this.redisCacheService.reset();
 
     return service;
   }
@@ -274,5 +271,28 @@ export class ServiceService {
       this.logger.error(`Error validating services: ${error.message}`);
       return false;
     }
+  }
+
+  async updateView(slug: string, newViews: number): Promise<ServiceDocument> {
+    if (newViews < 0) {
+      throw new BadRequestException(Message.InvalidViewsCount);
+    }
+
+    // Tìm và cập nhật blog theo slug
+    const project = await this.serviceModel.findOneAndUpdate(
+      { slug },
+      { $inc: { views: newViews } },
+      { new: true }
+    );
+
+    if (!project) {
+      throw new NotFoundException(Message.ServiceNotFound);
+    }
+
+    await this.redisCacheService
+      .reset()
+      .catch((err) => this.logger.error('Failed to clear cache:', err));
+
+    return project;
   }
 }

@@ -14,6 +14,8 @@ export function toDataResponse(
     description: service.description ?? '',
     link: service.link,
     price: service.price,
+    views: service.views ?? 0,
+    user: service.user ?? {},
     status: service.status as ServiceStatus,
     createdAt: service.createdAt || new Date(),
     updatedAt: service.updatedAt || new Date(),

@@ -20,6 +20,7 @@ export enum Message {
   BlogNotFound = 'Blog not found',
   InvalidCategoryId = 'Invalid category ID format',
   InvalidStatus = 'Invalid status value',
+  InvalidViewsCount = 'Invalid views count',
 }
 
 export enum Success {

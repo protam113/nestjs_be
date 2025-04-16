@@ -16,7 +16,7 @@ interface RateLimitInfo {
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
   private readonly windowMs = 5 * 1000; // 1s
-  private readonly maxRequests = 5;
+  private readonly maxRequests = 10;
   private readonly ipStore = new Map<string, RateLimitInfo>();
 
   use(req: Request, res: Response, next: NextFunction) {

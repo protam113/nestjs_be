@@ -376,4 +376,29 @@ export class BlogService {
 
     return blog;
   }
+
+  async updateView(slug: string, newViews: number): Promise<BlogDocument> {
+    // Kiểm tra tính hợp lệ của newViews
+    if (newViews < 0) {
+      throw new BadRequestException(Message.InvalidViewsCount);
+    }
+
+    // Tìm và cập nhật blog theo slug
+    const blog = await this.blogModel.findOneAndUpdate(
+      { slug }, // Tìm kiếm theo slug thay vì id
+      { $inc: { views: newViews } }, // Tăng views bằng cách sử dụng $inc
+      { new: true } // Trả về document sau khi cập nhật
+    );
+
+    if (!blog) {
+      throw new NotFoundException(Message.BlogNotFound);
+    }
+
+    // Xóa cache để đảm bảo dữ liệu mới nhất
+    await this.redisCacheService
+      .reset()
+      .catch((err) => this.logger.error('Failed to clear cache:', err));
+
+    return blog;
+  }
 }

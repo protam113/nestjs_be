@@ -11,6 +11,8 @@ export function toDataResponse(blog: Partial<BlogDocument>): DataResponse {
     file: blog.file ?? '',
     description: blog.description ?? '',
     status: blog.status as BlogStatus,
+    user: blog.user ?? {},
+    views: blog.views ?? 0,
     category: {
       _id: blog.category?._id?.toString() ?? '',
       name: blog.category?.name ?? '',

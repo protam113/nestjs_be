@@ -1,6 +1,11 @@
 import { SlugProvider } from '../slug/slug.provider';
 import { InjectModel } from '@nestjs/mongoose';
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
@@ -287,6 +292,29 @@ export class ProjectService {
         message: Message.NotFound,
         error: Error.NOT_FOUND,
       });
+    }
+
+    await this.redisCacheService
+      .reset()
+      .catch((err) => this.logger.error('Failed to clear cache:', err));
+
+    return project;
+  }
+
+  async updateView(slug: string, newViews: number): Promise<ProjectDocument> {
+    if (newViews < 0) {
+      throw new BadRequestException(Message.InvalidViewsCount);
+    }
+
+    // Tìm và cập nhật blog theo slug
+    const project = await this.projectModel.findOneAndUpdate(
+      { slug },
+      { $inc: { views: newViews } },
+      { new: true }
+    );
+
+    if (!project) {
+      throw new NotFoundException(Message.NotFound);
     }
 
     await this.redisCacheService

@@ -12,4 +12,5 @@ export const COLLECTION_KEYS = {
   PRICING: process.env.PRICING_COLLECTION || 'pricings',
   SEO: process.env.SEO_COLLECTION || 'seos',
   PROJECT: process.env.PROJECT_COLLECTION || 'projects',
+  TRACKING: process.env.TRACKING_COLLECTION || 'tracking',
 };

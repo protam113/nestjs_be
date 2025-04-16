@@ -25,6 +25,7 @@ export enum Message {
   FileRequired = 'File is required',
   FailedUploadImage = 'File upload failed',
   InvalidStatus = 'Invalid status value',
+  InvalidViewsCount = 'Invalid views count',
 }
 
 export enum Service {
