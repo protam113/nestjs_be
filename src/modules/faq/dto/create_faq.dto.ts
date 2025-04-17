@@ -1,11 +1,7 @@
-export enum Status {
-  Show = 'show',
-  Hide = 'hide',
-  Main = 'main',
-}
+import { FaqStatus } from '../faq.constant';
 
 export class CreateFaqDto {
   question: string;
   answer: string;
-  status?: Status;
+  status?: FaqStatus;
 }

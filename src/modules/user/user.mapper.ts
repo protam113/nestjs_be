@@ -1,4 +1,3 @@
-import { UserDocument } from 'src/entities/user.entity';
 import { User } from './user.interface';
 import { Role } from '../../common/enums/role.enum';
 

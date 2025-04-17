@@ -5,6 +5,7 @@ import { FaqService } from './faq.service';
 import { FaqEntity, FaqSchema } from '../../entities/faq.entity';
 import { SystemLogModule } from '../system-log/system-log.module';
 import { RedisCacheModule } from '../cache/redis-cache.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { RedisCacheModule } from '../cache/redis-cache.module';
         schema: FaqSchema,
       },
     ]),
+    AuthModule,
     SystemLogModule,
     RedisCacheModule,
   ],

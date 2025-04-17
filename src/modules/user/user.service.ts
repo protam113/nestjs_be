@@ -289,43 +289,39 @@ export class UserService {
     dto: UpdatePasswordDto
   ): Promise<{ status: string; message: string }> {
     const user = await this.userModel.findById(userId);
-
     if (!user) {
       throw new BadRequestException(UserError.UserNotFound);
     }
 
-    // Verify current password
     const isValidPassword = await user.comparePassword(dto.currentPassword);
     if (!isValidPassword) {
       throw new BadRequestException(UserError.CurrentIncorrect);
     }
 
-    // Verify new password matches confirmation
     if (dto.newPassword !== dto.confirmPassword) {
       throw new BadRequestException(UserError.PasswordNotMatch);
     }
 
-    // Generate verification code
     const verificationCode = randomBytes(3).toString('hex').toUpperCase();
-    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
 
-    // Store verification code with new password
     this.verificationCodes.set(userId, {
       code: verificationCode,
       expiresAt,
       newPassword: dto.newPassword,
     });
 
-    // Send verification code via email
-    try {
-      await this.emailPasswordService.sendMail({
-        recipientEmail: user.email,
-        verificationCode,
-      });
-    } catch (error) {
-      this.logger.error('Failed to send verification code:', error);
-      throw new BadRequestException(UserError.FailedVerification);
-    }
+    // Gửi email bất đồng bộ, phản hồi API ngay
+    setImmediate(() => {
+      this.emailPasswordService
+        .sendMail({
+          recipientEmail: user.email,
+          verificationCode,
+        })
+        .catch((error) => {
+          this.logger.error(`Email sent failed to ${user.email}:`, error);
+        });
+    });
 
     return {
       status: 'success',

@@ -11,7 +11,7 @@ import { DataResponse } from './responses/data.response';
 import { FaqEntity, FaqDocument } from '../../entities/faq.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
-import { Error, MAX_MAIN_FAQS, Message, Status } from './faq.constant';
+import { Error, MAX_MAIN_FAQS, Message, FaqStatus } from './faq.constant';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { UpdateFaqDto } from './dto/update_faq.dto';
@@ -38,9 +38,9 @@ export class FaqService {
     }
 
     // Check main FAQ limit if status is 'main'
-    if (createFaqDto.status === Status.Main) {
+    if (createFaqDto.status === FaqStatus.Main) {
       const mainFaqCount = await this.faqModel.countDocuments({
-        status: Status.Main,
+        status: FaqStatus.Main,
       });
       if (mainFaqCount >= MAX_MAIN_FAQS) {
         throw new BadRequestException(
@@ -91,7 +91,7 @@ export class FaqService {
     options: PaginationOptionsInterface,
     startDate?: string,
     endDate?: string,
-    status?: Status
+    status?: FaqStatus
   ): Promise<Pagination<DataResponse>> {
     const cacheKey = buildCacheKey('faq', {
       page: options.page,
@@ -118,7 +118,7 @@ export class FaqService {
       };
     }
 
-    if (status && Object.values(Status).includes(status))
+    if (status && Object.values(FaqStatus).includes(status))
       filter.status = status;
 
     const faqs = await this.faqModel
@@ -196,13 +196,38 @@ export class FaqService {
         role: user.role,
       },
     };
-
+    await this.redisCacheService.reset();
     const updatedFaq = await this.faqModel
       .findByIdAndUpdate(id, { $set: updateData }, { new: true })
       .lean()
       .exec();
 
     return updatedFaq as FaqDocument;
+  }
+
+  async updateStatus(id: string, status: FaqStatus): Promise<FaqDocument> {
+    // Kiểm tra tính hợp lệ của status
+    if (!Object.values(FaqStatus).includes(status)) {
+      throw new BadRequestException(Message.InvalidStatus);
+    }
+
+    // Tìm và cập nhật blog
+    const faq = await this.faqModel.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!faq) {
+      throw new NotFoundException(Message.FaqNotFound);
+    }
+
+    // Xóa cache để đảm bảo dữ liệu mới nhất
+    await this.redisCacheService
+      .reset()
+      .catch((err) => this.logger.error('Failed to clear cache:', err));
+
+    return faq;
   }
 
   async delete(id: string): Promise<void> {

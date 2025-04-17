@@ -16,7 +16,7 @@ import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { UserData } from '../user/user.interface';
 import { CreateServiceDto } from './dto/create-service';
-import { DataResponse } from './responses/service.response';
+import { DataResponse, DetailResponse } from './responses/service.response';
 import { Error, Message, ServiceStatus } from './service.constant';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { StatusCode, StatusType } from 'src/entities/status_code.entity';
@@ -222,9 +222,9 @@ export class ServiceService {
     return service;
   }
 
-  async findBySlug(slug: string): Promise<DataResponse> {
+  async findBySlug(slug: string): Promise<DetailResponse> {
     const cacheKey = `service_${slug}`;
-    const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
+    const cached = await this.redisCacheService.get<DetailResponse>(cacheKey);
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
@@ -245,7 +245,10 @@ export class ServiceService {
       .set(cacheKey, result, 3600)
       .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
 
-    return result;
+    return {
+      status: 'success',
+      result: result,
+    };
   }
 
   async validateService(serviceId: string): Promise<boolean> {

@@ -14,9 +14,10 @@ export enum Message {
   FaqNotFound = 'FaQ not found',
   QuestionRequired = 'Question and answer are required',
   QuestionAlreadyExit = 'Question already exists (duplicate index)',
+  InvalidStatus = 'Invalid status',
 }
 
-export enum Status {
+export enum FaqStatus {
   Show = 'show',
   Hide = 'hide',
   Main = 'main',

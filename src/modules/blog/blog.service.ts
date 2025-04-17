@@ -332,7 +332,7 @@ export class BlogService {
 
     return {
       status: 'success',
-      data: result,
+      result: result,
     };
   }
 

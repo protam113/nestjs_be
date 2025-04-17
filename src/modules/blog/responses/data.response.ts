@@ -26,7 +26,7 @@ export interface DataResponse {
 
 export interface DetailResponse {
   status: string;
-  data: {
+  result: {
     _id: string;
     title: string;
     slug: string;

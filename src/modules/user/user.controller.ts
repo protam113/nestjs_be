@@ -133,6 +133,7 @@ export class UserController {
 
   @Post('update-password')
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor(''))
   async updatePassword(
     @Req() req,
     @Body() updatePasswordDto: UpdatePasswordDto
@@ -146,21 +147,9 @@ export class UserController {
     return this.userService.initiatePasswordChange(userId, updatePasswordDto);
   }
 
-  @Post('initiate-password-change')
-  @UseGuards(JwtAuthGuard)
-  async initiatePasswordChange(
-    @Req() req,
-    @Body() updatePasswordDto: UpdatePasswordDto
-  ) {
-    const userId = req.user?.userId;
-    if (!userId) {
-      throw new BadRequestException('Invalid token: Missing user ID');
-    }
-    return this.userService.initiatePasswordChange(userId, updatePasswordDto);
-  }
-
   @Post('verify-code')
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor(''))
   async verifyCodeAndUpdatePassword(
     @Req() req,
     @Body() verifyCodeDto: VerifyCodeDto
