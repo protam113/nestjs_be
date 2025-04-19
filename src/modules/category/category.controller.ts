@@ -20,7 +20,10 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { Status, SystemLogType } from '../../entities/system-log.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StatusCode } from 'src/entities/status_code.entity';
-import { Error, Message } from './category.constant';
+import { CategoryStatus, Error, Message } from './category.constant';
+import { RolesGuard } from '../auth/guards/RolesGuard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../common/enums/role.enum';
 
 @Controller('category')
 export class CategoryController {
@@ -28,7 +31,7 @@ export class CategoryController {
 
   constructor(
     private readonly categoryService: CategoryService,
-    private readonly systemLogService: SystemLogService // inject SystemLogService ở đây
+    private readonly systemLogService: SystemLogService
   ) {}
 
   @Get()
@@ -36,13 +39,15 @@ export class CategoryController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10
+    @Query('limit') limit: number = 10,
+    @Query('status') status?: CategoryStatus
   ): Promise<any> {
     this.logger.debug('Fetching users with filters:', {
       startDate,
       endDate,
       page,
       limit,
+      status,
     });
 
     const options = {
@@ -50,7 +55,12 @@ export class CategoryController {
       limit,
     };
 
-    return this.categoryService.findAll(options, startDate, endDate);
+    return this.categoryService.findAll(
+      options,
+      startDate,
+      endDate,
+      status as CategoryStatus
+    );
   }
 
   @Post()
@@ -65,8 +75,8 @@ export class CategoryController {
       status: Status.Success,
       data: {
         user: req.user,
-        id: category._id,
-        title: category.name,
+        id: category.result._id,
+        title: category.result.name,
       },
     });
 
@@ -130,5 +140,16 @@ export class CategoryController {
     });
 
     return { message: 'Category deleted successfully' };
+  }
+
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.Admin)
+  @UseInterceptors(FileInterceptor(''))
+  async updateStatus(
+    @Param('id') id: string,
+    @Body('status') status: CategoryStatus
+  ) {
+    return this.categoryService.updateStatus(id, status);
   }
 }

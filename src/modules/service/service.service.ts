@@ -16,7 +16,9 @@ import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { UserData } from '../user/user.interface';
 import { CreateServiceDto } from './dto/create-service';
-import { DataResponse, DetailResponse } from './responses/service.response';
+import { DataResponse } from './responses/service.response';
+import { DetailResponse } from './responses/detail.response';
+
 import { Error, Message, ServiceStatus } from './service.constant';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { StatusCode, StatusType } from 'src/entities/status_code.entity';

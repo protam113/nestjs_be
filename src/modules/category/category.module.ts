@@ -6,6 +6,7 @@ import { CategoryEntity, CategorySchema } from '../../entities/category.entity';
 import { SlugProvider } from '../slug/slug.provider';
 import { SystemLogModule } from '../system-log/system-log.module';
 import { RedisCacheModule } from '../cache/redis-cache.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { RedisCacheModule } from '../cache/redis-cache.module';
       { name: CategoryEntity.name, schema: CategorySchema },
     ]),
     SystemLogModule,
+    AuthModule,
     RedisCacheModule,
   ],
   controllers: [CategoryController],

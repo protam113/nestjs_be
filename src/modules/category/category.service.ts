@@ -1,19 +1,24 @@
 import { SlugProvider } from '../slug/slug.provider';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CategoryEntity } from '../../entities/category.entity';
+import {
+  CategoryDocument,
+  CategoryEntity,
+} from '../../entities/category.entity';
 import { Model } from 'mongoose';
 
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
-import { CategoryDocument } from './category.interface';
 import { DataResponse } from './responses/data.response';
-import { Error, Message } from './category.constant';
+import { CategoryStatus, Error, Message } from './category.constant';
 import { UserData } from '../user/user.interface';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
-import { StatusCode } from 'src/entities/status_code.entity';
+import { StatusCode, StatusType } from 'src/entities/status_code.entity';
+import { toDataResponse } from './category.mapper';
+import { DetailResponse } from './responses/detail.response';
+import { CreateCategoryResponse } from './responses/create_category.response';
 
 @Injectable()
 export class CategoryService {
@@ -29,16 +34,18 @@ export class CategoryService {
   async findAll(
     options: PaginationOptionsInterface,
     startDate?: string,
-    endDate?: string
-  ): Promise<Pagination<CategoryEntity>> {
+    endDate?: string,
+    status?: CategoryStatus
+  ): Promise<Pagination<DataResponse>> {
     const cacheKey = buildCacheKey('categories', {
       page: options.page,
       limit: options.limit,
       start: startDate,
       end: endDate,
+      status: status || 'all',
     });
     const cached =
-      await this.redisCacheService.get<Pagination<CategoryEntity>>(cacheKey);
+      await this.redisCacheService.get<Pagination<DataResponse>>(cacheKey);
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
@@ -54,23 +61,28 @@ export class CategoryService {
       };
     }
 
+    if (status) {
+      const statusArray = status.split(',');
+      const validStatuses = statusArray.filter((s) =>
+        Object.values(CategoryStatus).includes(s as CategoryStatus)
+      );
+      if (validStatuses.length > 0) {
+        filter.status = { $in: validStatuses };
+      }
+    }
+
     const categories = await this.categoryModel
       .find(filter)
       .skip((options.page - 1) * options.limit)
       .limit(options.limit)
-      .lean();
+      .sort({ createdAt: -1 })
+      .exec();
 
     const total = await this.categoryModel.countDocuments(filter);
 
-    const mappedCategories = categories.map((category) => ({
-      _id: category._id,
-      name: category.name,
-      slug: category.slug,
-      createdAt: category.createdAt || new Date(),
-      updatedAt: category.updatedAt || new Date(),
-    })) as CategoryEntity[];
+    const mappedCategories = categories.map(toDataResponse);
 
-    const result = new Pagination<CategoryEntity>({
+    const result = new Pagination<DataResponse>({
       results: mappedCategories,
       total,
       total_page: Math.ceil(total / options.limit),
@@ -85,8 +97,8 @@ export class CategoryService {
   async created(
     createCategoryDto: CreateCategoryDto,
     user: UserData
-  ): Promise<CategoryDocument> {
-    const { name } = createCategoryDto;
+  ): Promise<CreateCategoryResponse> {
+    const { name, status } = createCategoryDto;
 
     const slug = this.slugProvider.generateSlug(name, { unique: true });
 
@@ -102,6 +114,7 @@ export class CategoryService {
     const newCategory = new this.categoryModel({
       name,
       slug,
+      status: status || CategoryStatus.Draft,
       user: {
         userId: user._id,
         username: user.username,
@@ -113,7 +126,10 @@ export class CategoryService {
       await this.redisCacheService.reset();
       const saved = await newCategory.save();
 
-      return saved;
+      return {
+        status: StatusType.Success,
+        result: saved,
+      };
     } catch (err) {
       if (err.code === 11000) {
         throw new BadRequestException(Error.ThisCategoryAlreadyExists);
@@ -122,21 +138,9 @@ export class CategoryService {
     }
   }
 
-  private mapToDataResponse(category: any): DataResponse {
-    const { _id, name, slug } = category;
-    return {
-      status: 'success',
-      result: {
-        _id,
-        name,
-        slug,
-      },
-    };
-  }
-
-  async findBySlug(slug: string): Promise<DataResponse> {
+  async findBySlug(slug: string): Promise<DetailResponse> {
     const cacheKey = `blog_${slug}`;
-    const cached = await this.redisCacheService.get<DataResponse>(cacheKey);
+    const cached = await this.redisCacheService.get<DetailResponse>(cacheKey);
 
     if (cached) {
       this.logger.log(`Cache HIT: ${cacheKey}`);
@@ -151,22 +155,23 @@ export class CategoryService {
         error: 'Not Found',
       });
     }
+    const categoryData = {
+      _id: category._id.toString(),
+      name: category.name,
+      slug: category.slug,
+      createdAt: category.createdAt,
+      updatedAt: category.updatedAt,
+    };
 
-    const result = this.mapToDataResponse(category);
+    const result = toDataResponse(categoryData);
     await this.redisCacheService
       .set(cacheKey, result, 3600)
       .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
 
-    return result;
-  }
-
-  async findByUuid(_id: string): Promise<DataResponse | null> {
-    const user = await this.categoryModel.findById(_id).lean();
-    if (!user) {
-      return null;
-    }
-    const response = this.mapToDataResponse(user);
-    return response;
+    return {
+      status: 'success',
+      result: result,
+    };
   }
 
   async validateCategories(categoryIds: string): Promise<boolean> {
@@ -177,6 +182,36 @@ export class CategoryService {
       this.logger.error(`Error validating service: ${error.message}`);
       return false;
     }
+  }
+
+  async updateStatus(
+    id: string,
+    status: CategoryStatus
+  ): Promise<CategoryDocument> {
+    if (!Object.values(CategoryStatus).includes(status)) {
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.InvalidStatus,
+        error: Error.INVALID_STATUS,
+      });
+    }
+
+    const service = await this.categoryModel.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!service) {
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.CategoryNotFound,
+        error: Error.NOT_FOUND,
+      });
+    }
+    await this.redisCacheService.reset();
+
+    return service;
   }
 
   async delete(_id: string): Promise<void> {
@@ -234,22 +269,36 @@ export class CategoryService {
         error: 'Conflict',
       });
     }
-
     try {
-      category.name = normalizedName;
-      category.slug = this.slugProvider.generateSlug(normalizedName, {
-        unique: true,
-      });
-      category.updatedAt = new Date();
-      category.user = {
-        userId: user._id,
-        username: user.username,
-        role: user.role,
-      };
+      // Instead of directly assigning to updatedAt, use updateOne
+      const updateResult = await this.categoryModel.findByIdAndUpdate(
+        _id,
+        {
+          $set: {
+            name: normalizedName,
+            slug: this.slugProvider.generateSlug(normalizedName, {
+              unique: true,
+            }),
+            user: {
+              userId: user._id,
+              username: user.username,
+              role: user.role,
+            },
+          },
+        },
+        { new: true }
+      );
 
-      const updatedCategory = await category.save();
+      if (!updateResult) {
+        throw new BadRequestException({
+          statusCode: StatusCode.NotFound,
+          message: Error.CategoryNotFound,
+          error: 'Not Found',
+        });
+      }
+
       await this.redisCacheService.reset();
-      return updatedCategory;
+      return updateResult;
     } catch (err) {
       if (err.code === 11000) {
         throw new BadRequestException({

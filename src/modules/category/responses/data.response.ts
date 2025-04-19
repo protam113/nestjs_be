@@ -1,18 +1,14 @@
-import { Document } from 'mongoose';
-
-export interface DataResponse {
-  status: string;
-  result: {
-    _id: string;
-    name: string;
-    slug: string;
-  };
+interface User {
+  _id: string;
+  name: string;
 }
 
-export interface CategoryDocument extends Document {
+export interface DataResponse {
+  _id: string;
   name: string;
   slug: string;
-  user: any;
+  user: User;
+  status: string;
   createdAt: Date;
   updatedAt: Date;
 }

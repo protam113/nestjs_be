@@ -149,12 +149,6 @@ Health checks are available at:
 
 [MIT Licensed](LICENSE)
 
-
----
-
-### 5. **Thêm phần về **Contributing** (Đóng góp vào dự án)**
-Một phần hướng dẫn về cách đóng góp vào dự án sẽ rất hữu ích, nhất là khi bạn muốn mời người khác tham gia vào dự án của mình. Bạn có thể sử dụng mẫu sau:
-
 ```markdown
 ## Contributing
 
