@@ -13,7 +13,7 @@ A NestJS-based backend service providing REST APIs for content management and us
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
-![npm](https://img.shields.io/npm/v/your-package-name)
+![npm](https://img.shields.io/npm/v/hust4l_be)
 ![license](https://img.shields.io/npm/l/my-cool-package)
 ![downloads](https://img.shields.io/npm/dm/my-cool-package)
 ![build](https://img.shields.io/github/actions/workflow/status/your-username/my-cool-project/ci.yml)
