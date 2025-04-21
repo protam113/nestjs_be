@@ -146,19 +146,27 @@ export class UserService {
         role: user.role,
       },
     });
+
+    // Gửi email và reset Redis song song
     try {
-      await this.emailRegisterService.sendRegisterMail({
-        recipientEmail: email,
-        name,
-        username,
-        password,
-      });
+      await Promise.all([
+        this.emailRegisterService.sendRegisterMail({
+          recipientEmail: email,
+          name,
+          username,
+          password,
+        }),
+        this.redisCacheService.reset(),
+      ]);
     } catch (error) {
-      this.logger.error('Failed to send registration email:', error);
-      // Continue with the response even if email fails
+      this.logger.error(
+        'Failed to send registration email or reset Redis:',
+        error
+      );
+      // Continue with the response even if email fails or Redis reset fails
     }
+
     const savedUser = await newUser.save();
-    await this.redisCacheService.reset();
 
     return {
       message: UserSuccess.UserCreated,

@@ -189,13 +189,20 @@ export class ContactService {
 
     const savedContact = await newContact.save();
 
+    // Sử dụng Promise.all để thực hiện gửi email và reset Redis song song
     try {
-      await this.emailService.sendThankYouEmail({
-        recipientEmail: createContactDto.email,
-        name: createContactDto.name,
-      });
-    } catch (error) {}
-    await this.redisCacheService.reset();
+      await Promise.all([
+        this.emailService.sendThankYouEmail({
+          recipientEmail: createContactDto.email,
+          name: createContactDto.name,
+        }),
+        this.redisCacheService.reset(),
+      ]);
+    } catch (error) {
+      // Xử lý lỗi gửi email hoặc reset Redis nếu cần thiết
+      console.error('Error occurred during async operations', error);
+    }
+
     return {
       status: StatusType.Success,
       result: savedContact,
