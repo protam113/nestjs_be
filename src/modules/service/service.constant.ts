@@ -7,6 +7,7 @@ export enum Error {
   NOT_FOUND = 'NOT_FOUND',
   FILE_UPLOAD_FAILED = 'FILE_UPLOAD_FAILED',
   INVALID_STATUS = 'INVALID_STATUS',
+  TITLE_REQUIRED = 'TITLE_REQUIRED',
 }
 
 export enum Success {
@@ -38,3 +39,8 @@ export enum ServiceStatus {
   Popular = 'popular',
   Draft = 'draft',
 }
+
+export const SERVICE_CACHE_TTL = {
+  SERVICE_LIST: 3600,
+  SERVICE_DETAIL: 10800,
+};

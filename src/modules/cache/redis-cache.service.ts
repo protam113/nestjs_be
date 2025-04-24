@@ -9,51 +9,83 @@ export class RedisCacheService {
   private redisClient: Redis;
 
   constructor(@Inject(CACHE_MANAGER) private readonly cache: Cache) {
-    // Get the Redis client from the cache manager
-    const store = this.cache.store;
-    this.redisClient = (store as any).client as Redis;
+    // Lấy store từ cache-manager (cache-manager-ioredis)
+    const cacheManager = this.cache['stores'][0]; // Truy cập trực tiếp vào store Redis
 
-    // Ensure we have a Redis client
+    // Kiểm tra xem cacheManager có hỗ trợ Redis không
+    if (cacheManager && cacheManager.store && cacheManager.store.client) {
+      this.redisClient = cacheManager.store.client;
+    }
+
+    // Kiểm tra Redis client
     if (!this.redisClient) {
       this.logger.warn(
         'Redis client not available. Pattern-based deletion will not work.'
       );
+    } else {
+      this.logger.log('Redis client initialized successfully');
     }
   }
 
-  async get<T>(key: string): Promise<T | undefined> {
-    const result = await this.cache.get<T>(key);
-    return result || undefined;
-  }
-
-  async set(key: string, value: any, ttl?: number): Promise<void> {
-    await this.cache.set(key, value, ttl);
-  }
-
-  async del(key: string): Promise<void> {
-    await this.cache.del(key);
-  }
-
-  async reset(): Promise<void> {
-    await this.cache.reset();
-  }
-
-  async delPrefix(prefix: string): Promise<void> {
-    if (!this.redisClient) {
-      this.logger.warn(
-        `Cannot delete by prefix '${prefix}': Redis client not available`
-      );
-      return;
+  // Kiểm tra lại Redis Client khi khởi tạo module
+  async onModuleInit() {
+    if (this.redisClient) {
+      this.logger.log('Redis client is available');
+    } else {
+      this.logger.warn('Redis client is not available');
     }
+  }
 
+  // Lấy giá trị từ Redis cache
+  async get<T>(key: string): Promise<T | null> {
     try {
-      const keys = await this.redisClient.keys(`${prefix}*`);
+      const value = await this.cache.get<T>(key);
+      return value || null;
+    } catch (error) {
+      this.logger.error('Error getting value from Redis', error);
+      return null;
+    }
+  }
+
+  // Lưu giá trị vào Redis cache
+  async set(key: string, value: any, ttl: number = 60): Promise<void> {
+    try {
+      await this.cache.set(key, value, ttl); // Set TTL cho cache
+    } catch (error) {
+      this.logger.error('Error setting value to Redis', error);
+    }
+  }
+
+  // Xóa giá trị trong Redis cache
+  async del(key: string): Promise<void> {
+    try {
+      await this.cache.del(key);
+    } catch (error) {
+      this.logger.error('Error deleting value from Redis', error);
+    }
+  }
+
+  // Reset tất cả dữ liệu trong Redis
+  async reset(): Promise<void> {
+    try {
+      await this.redisClient.flushall(); // Xóa tất cả dữ liệu trong Redis
+    } catch (error) {
+      this.logger.error('Error resetting Redis cache', error);
+    }
+  }
+
+  // Xóa cache theo pattern
+  async delByPattern(pattern: string): Promise<void> {
+    try {
+      const keys = await this.redisClient.keys(pattern); // Lấy tất cả keys theo pattern
       if (keys.length > 0) {
-        await this.redisClient.del(keys);
-        this.logger.log(`Deleted ${keys.length} keys with prefix '${prefix}'`);
+        await this.redisClient.del(keys); // Xóa các keys theo pattern
+        this.logger.log(
+          `Deleted ${keys.length} keys with pattern '${pattern}'`
+        );
       }
     } catch (error) {
-      this.logger.error(`Failed to delete keys with prefix '${prefix}'`, error);
+      this.logger.error('Error deleting keys by pattern', error);
     }
   }
 }

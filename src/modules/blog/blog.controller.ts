@@ -69,13 +69,18 @@ export class BlogController {
       category,
     });
 
-    return this.blogService.findAll(
-      { page, limit },
-      startDate,
-      endDate,
-      status as BlogStatus,
-      category
-    );
+    try {
+      return await this.blogService.findAll(
+        { page, limit },
+        startDate,
+        endDate,
+        status as BlogStatus,
+        category
+      );
+    } catch (error) {
+      this.logger.error('Error fetching blogs', error.stack);
+      throw error;
+    }
   }
 
   /**
@@ -168,6 +173,7 @@ export class BlogController {
     return this.blogService.findBySlug(slug);
   }
 
+  // Cập nhật trạng thái blog
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.Admin)

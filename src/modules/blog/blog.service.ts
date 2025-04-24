@@ -28,11 +28,12 @@ import { MediaService } from '../media/media.service';
 // Components
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { DataResponse, DetailResponse } from './responses/data.response';
-import { Error, Message } from './blog.constant';
+import { BLOG_CACHE_TTL, Error, Message } from './blog.constant';
 import { BlogStatus } from './blog.constant';
 import { toDataResponse } from './blog.mapper';
 import { CreateBlogResponse } from './responses/create_blog.response';
 import { StatusCode, StatusType } from 'src/entities/status_code.entity';
+import { buildBlogFilter } from 'src/helpers/blog.helper';
 
 @Injectable()
 
@@ -113,24 +114,7 @@ export class BlogService {
       return cached;
     }
 
-    const filter: Record<string, any> = {};
-
-    if (startDate && endDate)
-      filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
-
-    if (status) {
-      const statusArray = status.split(',');
-      const validStatuses = statusArray.filter((s) =>
-        Object.values(BlogStatus).includes(s as BlogStatus)
-      );
-      if (validStatuses.length > 0) {
-        filter.status = { $in: validStatuses };
-      }
-    }
-
-    if (category) {
-      filter.category = category;
-    }
+    const filter = buildBlogFilter({ startDate, endDate, status, category });
 
     const [blogs, total] = await Promise.all([
       this.blogModel
@@ -151,11 +135,11 @@ export class BlogService {
       current_page: options.page,
     });
 
-    await this.redisCacheService
-      .set(cacheKey, result, 7200)
-      .catch((err) =>
-        this.logger.warn(`Failed to cache blog list: ${err.message}`)
-      );
+    await this.redisCacheService.set(
+      cacheKey,
+      result,
+      BLOG_CACHE_TTL.BLOG_LIST
+    );
     return result;
   }
 
@@ -187,52 +171,50 @@ export class BlogService {
   ): Promise<CreateBlogResponse> {
     const { title, content, description, category, status } = createBlogDto;
 
-    if (!category) {
+    // Validate category
+    if (!category)
       throw new BadRequestException({
         message: Message.CATEGORY_REQUIRED,
         code: Error.CATEGORY_REQUIRED,
       });
+
+    // Validate title
+    if (!title || title.trim() === '') {
+      throw new BadRequestException({
+        message: 'Title is required to generate slug',
+        error: Error.TITLE_REQUIRED,
+      });
     }
 
+    // Generate unique slug
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
-    const blogExists = await this.blogModel.findOne({
-      $or: [{ title }, { slug }],
-    });
-    if (blogExists) {
+    // Check if blog exists or category is valid
+    const [exists, isValidCategory] = await Promise.all([
+      this.blogModel.findOne({ $or: [{ title }, { slug }] }),
+      this.categoryService.validateCategories(category),
+    ]);
+
+    if (exists)
       throw new BadRequestException({
-        statusCode: StatusCode.BadRequest,
         message: Message.ThisBlogAlreadyExists,
         error: Error.BLOG_ALREADY_EXISTS,
       });
-    }
 
-    // Validate category first
-    let validatedCategory: string;
-    try {
-      const valid = await this.categoryService.validateCategories(category);
-      if (!valid) {
-        throw new BadRequestException(Message.CategoryNotFound);
-      }
-      validatedCategory = category;
-    } catch (error) {
+    if (!isValidCategory)
       throw new BadRequestException({
-        statusCode: StatusCode.BadRequest,
         message: Message.CategoryValidation,
         error: Error.CATEGORY_VALIDATION,
       });
-    }
 
-    // Handle file upload
-    let imageUrl = '';
-    if (!file) {
+    // Validate and upload file
+    if (!file)
       throw new BadRequestException({
-        statusCode: StatusCode.BadRequest,
         message: Message.BlogThumbnailRequired,
         error: Error.FILE_REQUIRED,
       });
-    }
 
+    let imageUrl = '';
     try {
       const uploadedImage = await this.mediaService.uploadFile('/blog', file);
       imageUrl = uploadedImage.url;
@@ -243,12 +225,13 @@ export class BlogService {
       });
     }
 
+    // Create blog object
     const newBlog = new this.blogModel({
       title,
       slug,
       content,
       description,
-      category: validatedCategory,
+      category,
       file: imageUrl,
       status: status || BlogStatus.Draft,
       user: {
@@ -258,8 +241,17 @@ export class BlogService {
       },
     });
 
-    await this.redisCacheService.reset();
+    try {
+      await this.redisCacheService.delByPattern('blogs*');
+      this.logger.log('Cleared blog-related cache entries after create');
+    } catch (error) {
+      this.logger.error('Failed to clear cache after blog creation', error);
+    }
+    // Save blog and clear cache
     const savedBlog = await newBlog.save();
+
+    // Clear cache related to blogs
+
     return {
       status: StatusType.Success,
       result: savedBlog,
@@ -283,13 +275,27 @@ export class BlogService {
 
   async delete(id: string): Promise<void> {
     const result = await this.blogModel.findByIdAndDelete(id);
-    await this.redisCacheService.reset();
-    if (!result)
+
+    if (result) {
+      try {
+        await Promise.all([
+          this.redisCacheService.delByPattern('blogs*'),
+          this.redisCacheService.del(`blog_${result.slug}`),
+        ]);
+        this.logger.log(`Cleared cache for blog ID ${id} and blog lists`);
+      } catch (error) {
+        this.logger.error(
+          `Failed to clear cache after blog deletion: ${error.message}`,
+          error.stack
+        );
+      }
+    } else {
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
         message: Message.BlogNotFound,
-        error: Error.BLOG_ALREADY_EXISTS,
+        error: Error.BLOG_NOT_FOUND,
       });
+    }
   }
 
   /**
@@ -311,6 +317,8 @@ export class BlogService {
 
   async findBySlug(slug: string): Promise<DetailResponse> {
     const cacheKey = `blog_${slug}`;
+
+    // Check if the data is in cache first
     const cached = await this.redisCacheService.get<DetailResponse>(cacheKey);
 
     if (cached) {
@@ -318,17 +326,29 @@ export class BlogService {
       return cached;
     }
 
+    // If not in cache, retrieve from the database
     const blog = await this.blogModel
       .findOne({ slug })
       .populate('category', '_id name')
       .exec();
-    if (!blog) throw new NotFoundException(Message.BlogNotFound);
+
+    if (!blog) {
+      // Log that no blog was found and throw NotFoundException
+      this.logger.warn(`Blog with slug '${slug}' not found`);
+      throw new NotFoundException({
+        message: Message.BlogNotFound,
+        error: Error.BLOG_NOT_FOUND,
+      });
+    }
 
     const result = toDataResponse(blog);
 
-    await this.redisCacheService
-      .set(cacheKey, result, 10800)
-      .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
+    // Cache the blog result for future requests
+    await this.redisCacheService.set(
+      cacheKey,
+      result,
+      BLOG_CACHE_TTL.BLOG_DETAIL
+    );
 
     return {
       status: 'success',
@@ -353,51 +373,70 @@ export class BlogService {
    * await blogService.updateStatus('660123abc...', BlogStatus.Published);
    */
   async updateStatus(id: string, status: BlogStatus): Promise<BlogDocument> {
-    // Kiểm tra tính hợp lệ của status
     if (!Object.values(BlogStatus).includes(status)) {
-      throw new BadRequestException(Message.InvalidStatus);
+      throw new BadRequestException({
+        message: Message.InvalidStatus,
+        error: Error.INVALID_STATUS,
+      });
     }
 
     // Tìm và cập nhật blog
     const blog = await this.blogModel.findByIdAndUpdate(
       id,
       { status },
-      { new: true } // Trả về document sau khi cập nhật
+      { new: true }
     );
 
+    // Kiểm tra xem blog có tồn tại không
     if (!blog) {
-      throw new NotFoundException(Message.BlogNotFound);
+      this.logger.warn(`Blog with ID ${id} not found for status update`);
+      throw new NotFoundException({
+        message: Message.BlogNotFound,
+        error: Error.BLOG_NOT_FOUND,
+      });
     }
 
+    // Log thông tin khi cập nhật trạng thái
+    this.logger.log(`Blog with ID ${id} updated to status '${status}'`);
+
     // Xóa cache để đảm bảo dữ liệu mới nhất
-    await this.redisCacheService
-      .reset()
-      .catch((err) => this.logger.error('Failed to clear cache:', err));
+    await this.redisCacheService.delByPattern('blogs*');
+    await this.redisCacheService.del(`blog_${id}`);
 
     return blog;
   }
 
   async updateView(slug: string, newViews: number): Promise<BlogDocument> {
-    // Kiểm tra tính hợp lệ của newViews
+    // Kiểm tra số lượt xem hợp lệ
     if (newViews < 0) {
-      throw new BadRequestException(Message.InvalidViewsCount);
+      throw new BadRequestException({
+        message: Message.InvalidViewsCount,
+        error: Error.INVALID_VIEWS_COUNT,
+      });
     }
 
-    // Tìm và cập nhật blog theo slug
+    // Cập nhật lượt xem
     const blog = await this.blogModel.findOneAndUpdate(
-      { slug }, // Tìm kiếm theo slug thay vì id
-      { $inc: { views: newViews } }, // Tăng views bằng cách sử dụng $inc
-      { new: true } // Trả về document sau khi cập nhật
+      { slug },
+      { $inc: { views: newViews } },
+      { new: true } // Trả về blog sau khi cập nhật
     );
 
+    // Nếu không tìm thấy blog
     if (!blog) {
-      throw new NotFoundException(Message.BlogNotFound);
+      this.logger.warn(`Blog with slug ${slug} not found for view update`);
+      throw new NotFoundException({
+        message: Message.BlogNotFound,
+        error: Error.BLOG_NOT_FOUND,
+      });
     }
 
+    // Log thông tin khi cập nhật lượt xem
+    this.logger.log(`Blog with slug '${slug}' updated views by ${newViews}`);
+
     // Xóa cache để đảm bảo dữ liệu mới nhất
-    await this.redisCacheService
-      .reset()
-      .catch((err) => this.logger.error('Failed to clear cache:', err));
+    await this.redisCacheService.delByPattern('blogs*');
+    await this.redisCacheService.del(`blog_${slug}`);
 
     return blog;
   }

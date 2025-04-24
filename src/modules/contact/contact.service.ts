@@ -12,7 +12,12 @@ import { ContactDocument, ContactEntity } from '../../entities/contact.entity';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 
-import { Error, ContactStatus, Message } from './contact.constant';
+import {
+  Error,
+  ContactStatus,
+  Message,
+  CONTACT_CACHE_TTL,
+} from './contact.constant';
 import { EmailService } from '../../services/email.service';
 import { DataResponse } from './responses/data.response';
 import { CreateContactDto } from './dto/create-contact.dto';
@@ -25,6 +30,7 @@ import { toDataResponse } from './contact.mapper';
 import { CreateContactResponse } from './responses/create_contact.response';
 import { StatusCode, StatusType } from 'src/entities/status_code.entity';
 import { UpdateContactResponse } from './responses/update_contact.respone';
+import { buildContactFilter } from 'src/helpers/contact.helper';
 
 @Injectable()
 export class ContactService {
@@ -61,38 +67,7 @@ export class ContactService {
       return cached;
     }
 
-    const filter: any = {};
-
-    if (startDate && endDate) {
-      filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
-    }
-
-    // Improved status filtering
-    if (status) {
-      // Log the incoming status for debugging
-      this.logger.debug(`Filtering by status: ${status}`);
-
-      if (!Object.values(ContactStatus).includes(status)) {
-        throw new BadRequestException(
-          `Invalid status. Valid values are: ${Object.values(ContactStatus).join(', ')}`
-        );
-      }
-      filter.status = status;
-    }
-
-    if (service) {
-      if (service === 'null') {
-        // Filter for contacts with null service
-        filter.service = null;
-      } else {
-        try {
-          // Filter for specific service ID
-          filter.service = service;
-        } catch (e) {
-          throw new BadRequestException('Invalid service ID format');
-        }
-      }
-    }
+    const filter = buildContactFilter({ startDate, endDate, status, service });
 
     const [contacts, total] = await Promise.all([
       this.contactModel
@@ -118,7 +93,11 @@ export class ContactService {
       current_page: options.page,
     });
 
-    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    await this.redisCacheService.set(
+      cacheKey,
+      result,
+      CONTACT_CACHE_TTL.CONTACT_LIST
+    );
     return result;
   }
 
@@ -136,9 +115,11 @@ export class ContactService {
 
   async delete(_id: string): Promise<void> {
     const result = await this.contactModel.findByIdAndDelete(_id);
-    await this.redisCacheService.reset();
-
-    if (!result) {
+    if (result) {
+      await this.redisCacheService.delByPattern('contacts*');
+      await this.redisCacheService.del(`contacts_${_id}`);
+    } else {
+      // If the blog wasn't found, throw a clear error
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
         message: Message.ContactNotFound,
@@ -159,7 +140,6 @@ export class ContactService {
       throw new BadRequestException(Message.DataRequired);
     }
     const { service, phone_number, email, message, name } = createContactDto;
-
     // Initialize serviceId as undefined
     let serviceId: string | undefined;
 
@@ -196,7 +176,7 @@ export class ContactService {
           recipientEmail: createContactDto.email,
           name: createContactDto.name,
         }),
-        this.redisCacheService.reset(),
+        this.redisCacheService.delByPattern('contacts*'),
       ]);
     } catch (error) {
       // Xử lý lỗi gửi email hoặc reset Redis nếu cần thiết
@@ -249,7 +229,8 @@ export class ContactService {
       });
     }
     await updatedContact.save();
-    await this.redisCacheService.reset();
+    await this.redisCacheService.delByPattern('contacts*');
+    await this.redisCacheService.del(`contacts_${id}`);
     return {
       status: StatusType.Success,
       result: updatedContact,

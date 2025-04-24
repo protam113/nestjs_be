@@ -8,6 +8,7 @@ export enum Error {
   FILE_UPLOAD_FAILED = 'FILE_UPLOAD_FAILED',
   SERVICE_REQUIRED = 'SERVICE_REQUIRED',
   SERVICE_NOT_FOUND = 'SERVICE_NOT_FOUND',
+  TITLE_REQUIRED = 'TITLE_REQUIRED',
 }
 
 export enum Success {
@@ -25,6 +26,7 @@ export enum Message {
   ServiceNotFound = 'Service not found',
   ServiceValidationFailed = 'Service validation failed',
   InvalidViewsCount = 'Invalid views count',
+  TitleIsRequired = 'Title is required to generate slug',
 }
 
 export enum ProjectStatus {
@@ -33,3 +35,8 @@ export enum ProjectStatus {
   Popular = 'popular',
   Draft = 'draft',
 }
+
+export const PROJECT_CACHE_TTL = {
+  PROJECT_LIST: 3600,
+  PROJECT_DETAIL: 10800,
+};

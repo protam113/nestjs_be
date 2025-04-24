@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { RedisCacheService } from '../cache/redis-cache.service';
 
 @Injectable()
 export class MediaService {
@@ -13,16 +14,16 @@ export class MediaService {
   private readonly redis = require('redis');
   private client;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly cacheService: RedisCacheService // Thêm vô đây
+  ) {
     // Get required config values or throw error if missing
     this.AUTH_URL = this.getRequiredConfig('AUTH_URL');
     this.BASE_URL = this.getRequiredConfig('BASE_URL');
     this.SWIFT_USERNAME = this.getRequiredConfig('SWIFT_USERNAME');
     this.SWIFT_PASSWORD = this.getRequiredConfig('SWIFT_PASSWORD');
     this.PROJECT_ID = this.getRequiredConfig('PROJECT_ID');
-
-    // Initialize Redis client with async connection
-    this.initRedisClient();
   }
 
   private getRequiredConfig(key: string): string {
@@ -32,20 +33,8 @@ export class MediaService {
     }
     return value;
   }
-
-  private async initRedisClient() {
-    this.client = this.redis.createClient({
-      url:
-        this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
-    });
-
-    await this.client.connect().catch((err) => {
-      console.error('Redis connection error:', err);
-    });
-  }
-
   async getAuthToken(): Promise<string> {
-    let token = await this.client.get('XAuthToken');
+    let token = (await this.cacheService.get('XAuthToken')) as string;
 
     if (!token) {
       const authPayload = {
@@ -79,9 +68,7 @@ export class MediaService {
         token = response.headers['x-subject-token'];
 
         if (token) {
-          await this.client.set('XAuthToken', token, {
-            EX: 3600,
-          });
+          await this.cacheService.set('XAuthToken', token, 3600);
         }
       } catch (error) {
         throw new Error('Error fetching token from VStorage: ' + error.message);
@@ -134,6 +121,69 @@ export class MediaService {
         message: 'File upload failed',
         details: error.message,
         code: 'UPLOAD_ERROR',
+      });
+    }
+  }
+
+  async deleteFiles(
+    fileUrls: string[]
+  ): Promise<{ message: string; deleted: string[] }> {
+    if (!fileUrls || fileUrls.length === 0) {
+      throw new BadRequestException({
+        message: 'No file URLs provided',
+        code: 'FILES_REQUIRED',
+      });
+    }
+
+    const authToken = await this.getAuthToken();
+    const containerName = this.getRequiredConfig('CONTAINER_NAME'); // Ensure it's set properly
+
+    // Chỉnh sửa phần này để xử lý URL đầy đủ
+    const filePaths = fileUrls.map((url) => {
+      try {
+        const parsed = new URL(url); // Parse full URL
+        const fullPath = parsed.pathname; // /v1/AUTH_xxx/cdn/hust4l/desc/fb.png
+        const idx = fullPath.indexOf(containerName); // Ensure that the container name is correct
+        if (idx === -1)
+          throw new Error('Invalid URL or missing container name');
+        return fullPath.slice(idx + containerName.length + 1); // Skip container part
+      } catch (err) {
+        throw new BadRequestException({
+          message: 'Invalid file URL provided',
+          details: url,
+          code: 'INVALID_URL',
+        });
+      }
+    });
+
+    const bodyData = filePaths.join('\n');
+    const bulkDeleteUrl = `${this.BASE_URL}?bulk-delete`;
+
+    try {
+      const response = await axios.post(bulkDeleteUrl, bodyData, {
+        headers: {
+          'X-Auth-Token': authToken,
+          'Content-Type': 'text/plain',
+        },
+      });
+
+      if (response.status !== 200) {
+        throw new BadRequestException({
+          message: 'Failed to delete files from storage',
+          response: response.data,
+          code: 'DELETE_FAILED',
+        });
+      }
+
+      return {
+        message: 'Files deleted successfully',
+        deleted: filePaths,
+      };
+    } catch (error) {
+      throw new BadRequestException({
+        message: 'File deletion failed',
+        details: error.response?.data || error.message,
+        code: 'DELETE_ERROR',
       });
     }
   }

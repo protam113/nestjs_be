@@ -10,7 +10,12 @@ import { Model } from 'mongoose';
 import { Pagination } from '../paginate/pagination';
 import { PaginationOptionsInterface } from '../paginate/pagination.options.interface';
 import { DataResponse } from './responses/data.response';
-import { CategoryStatus, Error, Message } from './category.constant';
+import {
+  CATEGORY_CACHE_TTL,
+  CategoryStatus,
+  Error,
+  Message,
+} from './category.constant';
 import { UserData } from '../user/user.interface';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { RedisCacheService } from '../cache/redis-cache.service';
@@ -19,6 +24,7 @@ import { StatusCode, StatusType } from 'src/entities/status_code.entity';
 import { toDataResponse } from './category.mapper';
 import { DetailResponse } from './responses/detail.response';
 import { CreateCategoryResponse } from './responses/create_category.response';
+import { buildCategoryFilter } from 'src/helpers/category.helpter';
 
 @Injectable()
 export class CategoryService {
@@ -52,24 +58,7 @@ export class CategoryService {
       return cached;
     }
 
-    const filter: any = {};
-
-    if (startDate && endDate) {
-      filter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    }
-
-    if (status) {
-      const statusArray = status.split(',');
-      const validStatuses = statusArray.filter((s) =>
-        Object.values(CategoryStatus).includes(s as CategoryStatus)
-      );
-      if (validStatuses.length > 0) {
-        filter.status = { $in: validStatuses };
-      }
-    }
+    const filter = buildCategoryFilter({ startDate, endDate, status });
 
     const categories = await this.categoryModel
       .find(filter)
@@ -90,7 +79,11 @@ export class CategoryService {
       current_page: options.page,
     });
 
-    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    await this.redisCacheService.set(
+      cacheKey,
+      result,
+      CATEGORY_CACHE_TTL.CATEGORY_LIST
+    );
     return result;
   }
 
@@ -100,15 +93,25 @@ export class CategoryService {
   ): Promise<CreateCategoryResponse> {
     const { name, status } = createCategoryDto;
 
+    // Validate title
+    if (!name || name.trim() === '') {
+      throw new BadRequestException({
+        message: 'Name is required to generate slug',
+        error: Error.NAME_REQUIRED,
+      });
+    }
+
     const slug = this.slugProvider.generateSlug(name, { unique: true });
 
     const existingCategory = await this.categoryModel.findOne({
       $or: [{ name }, { slug }],
     });
 
-    if (existingCategory) {
-      throw new BadRequestException(Error.ThisCategoryAlreadyExists);
-    }
+    if (existingCategory)
+      throw new BadRequestException({
+        message: Message.ThisCategoryAlreadyExists,
+        error: Error.CATEGORY_ALREADY_EXISTS,
+      });
 
     // ✅ Tạo category mới
     const newCategory = new this.categoryModel({
@@ -123,7 +126,9 @@ export class CategoryService {
     });
 
     try {
-      await this.redisCacheService.reset();
+      await this.redisCacheService.delByPattern('categories*');
+      await this.redisCacheService.del(`categories${slug}`);
+
       const saved = await newCategory.save();
 
       return {
@@ -132,7 +137,10 @@ export class CategoryService {
       };
     } catch (err) {
       if (err.code === 11000) {
-        throw new BadRequestException(Error.ThisCategoryAlreadyExists);
+        throw new BadRequestException({
+          message: Message.ThisCategoryAlreadyExists,
+          error: Error.CATEGORY_ALREADY_EXISTS,
+        });
       }
       throw err;
     }
@@ -151,8 +159,8 @@ export class CategoryService {
     if (!category) {
       throw new BadRequestException({
         statusCode: StatusCode.NotFound,
-        message: Error.CategoryNotFound,
-        error: 'Not Found',
+        message: Message.CategoryNotFound,
+        error: Error.NOT_FOUND,
       });
     }
     const categoryData = {
@@ -216,13 +224,15 @@ export class CategoryService {
 
   async delete(_id: string): Promise<void> {
     const result = await this.categoryModel.findByIdAndDelete(_id);
-    await this.redisCacheService.reset();
 
-    if (!result) {
+    if (result) {
+      await this.redisCacheService.delByPattern('categories*');
+      await this.redisCacheService.del(`categories${_id}`);
+    } else {
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
         message: Message.CategoryNotFound,
-        error: Error.CategoryNotFound,
+        error: Error.CATEGORY_NOT_FOUND,
       });
     }
   }
@@ -237,7 +247,7 @@ export class CategoryService {
     if (!category) {
       throw new BadRequestException({
         statusCode: StatusCode.NotFound,
-        message: Error.CategoryNotFound,
+        message: Message.CategoryNotFound,
         error: 'Not Found',
       });
     }
@@ -265,7 +275,7 @@ export class CategoryService {
     if (existingCategory) {
       throw new BadRequestException({
         statusCode: StatusCode.Conflict,
-        message: Error.ThisCategoryAlreadyExists,
+        message: Message.ThisCategoryAlreadyExists,
         error: 'Conflict',
       });
     }
@@ -292,7 +302,7 @@ export class CategoryService {
       if (!updateResult) {
         throw new BadRequestException({
           statusCode: StatusCode.NotFound,
-          message: Error.CategoryNotFound,
+          message: Message.CategoryNotFound,
           error: 'Not Found',
         });
       }
@@ -303,7 +313,7 @@ export class CategoryService {
       if (err.code === 11000) {
         throw new BadRequestException({
           statusCode: StatusCode.Conflict,
-          message: Error.ThisCategoryAlreadyExists,
+          message: Message.ThisCategoryAlreadyExists,
           error: 'Conflict',
         });
       }

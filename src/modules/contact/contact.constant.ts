@@ -24,3 +24,8 @@ export enum ContactStatus {
   Pending = 'pending',
   Rejected = 'rejected',
 }
+
+export const CONTACT_CACHE_TTL = {
+  CONTACT_LIST: 3600,
+  CONTACT_DETAIL: 10800,
+};

@@ -12,7 +12,12 @@ import { PaginationOptionsInterface } from '../paginate/pagination.options.inter
 import { UserData } from '../user/user.interface';
 import { CreateProjectDto } from './dto/create_project.dto';
 import { DataResponse } from './responses/data.response';
-import { Error, Message, ProjectStatus } from './project.constant';
+import {
+  Error,
+  Message,
+  PROJECT_CACHE_TTL,
+  ProjectStatus,
+} from './project.constant';
 import { RedisCacheService } from '../cache/redis-cache.service';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { ProjectDocument, ProjectEntity } from 'src/entities/project.entity';
@@ -21,6 +26,7 @@ import { StatusCode, StatusType } from 'src/entities/status_code.entity';
 import { toDataResponse } from './project.mapper';
 import { CreateProjectResponse } from './responses/create_project.response';
 import { ServiceService } from '../service/service.service';
+import { buildProjectFilter } from 'src/helpers/project,helper';
 
 @Injectable()
 export class ProjectService {
@@ -58,28 +64,7 @@ export class ProjectService {
       return cached;
     }
 
-    const filter: any = {};
-
-    if (startDate && endDate) {
-      filter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    }
-
-    if (status) {
-      const statusArray = status.split(',');
-      const validStatuses = statusArray.filter((s) =>
-        Object.values(ProjectStatus).includes(s as ProjectStatus)
-      );
-      if (validStatuses.length > 0) {
-        filter.status = { $in: validStatuses };
-      }
-    }
-
-    if (service) {
-      filter.service = service;
-    }
+    const filter = buildProjectFilter({ startDate, endDate, status, service });
 
     const projects = await this.projectModel
       .find(filter)
@@ -101,14 +86,22 @@ export class ProjectService {
       current_page: options.page,
     });
 
-    await this.redisCacheService.set(cacheKey, result, 3600).catch(() => null);
+    await this.redisCacheService.set(
+      cacheKey,
+      result,
+      PROJECT_CACHE_TTL.PROJECT_LIST
+    );
     return result;
   }
 
   async delete(id: string): Promise<void> {
     const result = await this.projectModel.findByIdAndDelete(id);
-    await this.redisCacheService.reset();
-    if (!result) {
+
+    if (result) {
+      await this.redisCacheService.delByPattern('projects*');
+      await this.redisCacheService.del(`project_${id}`);
+    } else {
+      // If the blog wasn't found, throw a clear error
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
         message: Message.NotFound,
@@ -141,13 +134,23 @@ export class ProjectService {
     }
 
     // Generate slug from title
+    if (!title || title.trim() === '') {
+      throw new BadRequestException({
+        message: Message.TitleIsRequired,
+        error: Error.TITLE_REQUIRED,
+      });
+    }
+
+    // Generate unique slug
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
-    const existing = await this.projectModel.findOne({
-      $or: [{ title }, { slug }],
-    });
+    // Check if blog exists or category is valid
+    const [exists, isValidService] = await Promise.all([
+      this.projectModel.findOne({ $or: [{ title }, { slug }] }),
+      this.serviceService.validateServices(service),
+    ]);
 
-    if (existing) {
+    if (exists) {
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
         message: Message.ThisProjectAlreadyExists,
@@ -157,24 +160,12 @@ export class ProjectService {
 
     let serviceIds: string[] | undefined;
 
-    if (service) {
-      try {
-        const isValid = await this.serviceService.validateServices(service);
-        if (!isValid) {
-          throw new BadRequestException({
-            statusCode: StatusCode.BadRequest,
-            message: Message.ServiceNotFound,
-            error: Error.SERVICE_NOT_FOUND,
-          });
-        }
-
-        serviceIds = service;
-      } catch (error) {
-        throw new BadRequestException(
-          `${Message.ServiceValidationFailed}: ${error.message}`
-        );
-      }
-    }
+    if (!isValidService)
+      throw new BadRequestException({
+        statusCode: StatusCode.BadRequest,
+        message: Message.ServiceNotFound,
+        error: Error.SERVICE_NOT_FOUND,
+      });
 
     let imageUrl = '';
     if (!file) {
@@ -219,8 +210,10 @@ export class ProjectService {
       },
     });
 
+    await this.redisCacheService.delByPattern('projects*');
+    await this.redisCacheService.del(`project_${slug}`);
+
     await newProject.save();
-    await this.redisCacheService.reset();
 
     return {
       status: StatusType.Success,
@@ -294,9 +287,8 @@ export class ProjectService {
       });
     }
 
-    await this.redisCacheService
-      .reset()
-      .catch((err) => this.logger.error('Failed to clear cache:', err));
+    await this.redisCacheService.delByPattern('projects*');
+    await this.redisCacheService.del(`project_${id}`);
 
     return project;
   }

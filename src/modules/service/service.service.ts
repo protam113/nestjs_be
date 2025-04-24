@@ -19,11 +19,17 @@ import { CreateServiceDto } from './dto/create-service';
 import { DataResponse } from './responses/service.response';
 import { DetailResponse } from './responses/detail.response';
 
-import { Error, Message, ServiceStatus } from './service.constant';
+import {
+  Error,
+  Message,
+  SERVICE_CACHE_TTL,
+  ServiceStatus,
+} from './service.constant';
 import { buildCacheKey } from '../../utils/cache-key.util';
 import { StatusCode, StatusType } from 'src/entities/status_code.entity';
 import { toDataResponse } from './service.mapper';
 import { CreateServiceResponse } from './responses/create_service.response';
+import { buildServiceFilter } from 'src/helpers/service.helper';
 
 @Injectable()
 export class ServiceService {
@@ -57,25 +63,7 @@ export class ServiceService {
       this.logger.log(`Cache HIT: ${cacheKey}`);
       return cached;
     }
-
-    const filter: any = {};
-
-    if (startDate && endDate) {
-      filter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    }
-
-    if (status) {
-      const statusArray = status.split(',');
-      const validStatuses = statusArray.filter((s) =>
-        Object.values(ServiceStatus).includes(s as ServiceStatus)
-      );
-      if (validStatuses.length > 0) {
-        filter.status = { $in: validStatuses };
-      }
-    }
+    const filter = buildServiceFilter({ startDate, endDate, status });
 
     const services = await this.serviceModel
       .find(filter)
@@ -96,9 +84,11 @@ export class ServiceService {
       current_page: options.page,
     });
 
-    await this.redisCacheService
-      .set(cacheKey, result, 604800)
-      .catch(() => null);
+    await this.redisCacheService.set(
+      cacheKey,
+      result,
+      SERVICE_CACHE_TTL.SERVICE_LIST
+    );
     return result;
   }
 
@@ -110,7 +100,15 @@ export class ServiceService {
     const { title, content, description, price, link, status } =
       createServiceDto;
 
-    // Generate slug from title
+    // Validate title
+    if (!title || title.trim() === '') {
+      throw new BadRequestException({
+        message: 'Title is required to generate slug',
+        error: Error.TITLE_REQUIRED,
+      });
+    }
+
+    // Generate unique slug
     const slug = this.slugProvider.generateSlug(title, { unique: true });
 
     const existing = await this.serviceModel.findOne({
@@ -173,8 +171,11 @@ export class ServiceService {
         role: user.role,
       },
     });
+
+    await this.redisCacheService.delByPattern('services*');
+    await this.redisCacheService.del(`services_${slug}`);
+
     await newService.save();
-    await this.redisCacheService.reset();
     return {
       status: StatusType.Success,
       result: newService,
@@ -183,8 +184,11 @@ export class ServiceService {
 
   async delete(id: string): Promise<void> {
     const result = await this.serviceModel.findByIdAndDelete(id);
-    await this.redisCacheService.reset();
-    if (!result) {
+    if (result) {
+      await this.redisCacheService.delByPattern('services*');
+      await this.redisCacheService.del(`service_${id}`);
+    } else {
+      // If the blog wasn't found, throw a clear error
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
         message: Message.ServiceNotFound,
@@ -197,7 +201,6 @@ export class ServiceService {
     id: string,
     status: ServiceStatus
   ): Promise<ServiceDocument> {
-    // Kiểm tra tính hợp lệ của status
     if (!Object.values(ServiceStatus).includes(status)) {
       throw new BadRequestException({
         statusCode: StatusCode.BadRequest,
@@ -219,7 +222,8 @@ export class ServiceService {
         error: Error.NOT_FOUND,
       });
     }
-    await this.redisCacheService.reset();
+    await this.redisCacheService.delByPattern('services*');
+    await this.redisCacheService.del(`service_${id}`);
 
     return service;
   }
@@ -243,10 +247,11 @@ export class ServiceService {
     }
     const result = toDataResponse(service);
 
-    await this.redisCacheService
-      .set(cacheKey, result, 3600)
-      .catch((err) => this.logger.error(`Failed to cache ${cacheKey}`, err));
-
+    await this.redisCacheService.set(
+      cacheKey,
+      result,
+      SERVICE_CACHE_TTL.SERVICE_DETAIL
+    );
     return {
       status: 'success',
       result: result,
