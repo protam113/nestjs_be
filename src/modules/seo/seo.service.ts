@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SeoEntity, SeoDocument } from '../../entities/seo.entity';
@@ -8,6 +8,8 @@ import { buildCacheKey } from '../../utils/cache-key.util';
 
 @Injectable()
 export class SeoService {
+  private readonly logger = new Logger(SeoService.name);
+
   constructor(
     @InjectModel(SeoEntity.name)
     private readonly seoModel: Model<SeoDocument>,
@@ -61,7 +63,12 @@ export class SeoService {
     if (!updated) {
       throw new NotFoundException('Failed to update SEO data');
     }
-    await this.redisCacheService.reset();
+    try {
+      await this.redisCacheService.delByPattern('seo*');
+      this.logger.log('Cleared blog-related cache entries after create');
+    } catch (error) {
+      this.logger.error('Failed to clear cache after blog creation', error);
+    }
     return updated;
   }
 

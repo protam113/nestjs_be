@@ -2,8 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { AppConfigType } from './configs/app';
 import { ConfigService } from '@nestjs/config';
-import * as cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
+// Change the import style for cookie-parser
+const cookieParser = require('cookie-parser');
 
 async function hust4l() {
   const app = await NestFactory.create(AppModule);
@@ -15,7 +16,7 @@ async function hust4l() {
 
   app.useGlobalPipes(
     new ValidationPipe({
-      transform: true, // 👈 cái này quan trọng
+      transform: true, // Important for data transformation
     })
   );
 

@@ -9,15 +9,11 @@ export class RedisCacheService {
   private redisClient: Redis;
 
   constructor(@Inject(CACHE_MANAGER) private readonly cache: Cache) {
-    // Lấy store từ cache-manager (cache-manager-ioredis)
-    const cacheManager = this.cache['stores'][0]; // Truy cập trực tiếp vào store Redis
+    // Access the store client directly
+    this.redisClient =
+      (this.cache as any).store?.getClient?.() ||
+      (this.cache as any).store?.client;
 
-    // Kiểm tra xem cacheManager có hỗ trợ Redis không
-    if (cacheManager && cacheManager.store && cacheManager.store.client) {
-      this.redisClient = cacheManager.store.client;
-    }
-
-    // Kiểm tra Redis client
     if (!this.redisClient) {
       this.logger.warn(
         'Redis client not available. Pattern-based deletion will not work.'

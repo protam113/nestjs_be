@@ -14,6 +14,7 @@ import { PaginationOptionsInterface } from '../paginate/pagination.options.inter
 import { Pagination } from '../paginate/pagination';
 import { TrackingResponseDto, Type } from './responses/data.response';
 import { toDataResponse } from './tracking.mapper';
+import { buildTrackingFilter } from 'src/helpers/tracking.helper';
 
 @Injectable()
 export class TrackingService {
@@ -177,35 +178,19 @@ export class TrackingService {
       return cached;
     }
 
-    const filter: any = {};
+    const { filter, sortCondition } = buildTrackingFilter({
+      startDate,
+      endDate,
+      type,
+      sort,
+    });
 
-    // Filter theo ngày (nếu có)
-    if (startDate && endDate) {
-      filter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    }
-
-    // Filter theo type (nếu có)
-    if (type) {
-      filter.type = type; // Không cần phải tách type ra nữa vì đã là enum.
-    }
-
-    let sortCondition = {};
-    if (sort) {
-      const sortDirection = sort === 'desc' ? -1 : 1;
-      sortCondition = { views: sortDirection }; // Sắp xếp theo số lượng views
-    }
-
-    // Lấy dữ liệu từ DB
     const trackings = await this.trackingModel
       .find(filter)
       .lean()
       .skip((options.page - 1) * options.limit)
       .limit(options.limit)
-      .sort({ createdAt: -1 })
-      .sort(sortCondition)
+      .sort(sortCondition) // <--- phải là cái này
       .exec();
 
     // Tổng số kết quả

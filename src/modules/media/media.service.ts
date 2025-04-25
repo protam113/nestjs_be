@@ -136,18 +136,26 @@ export class MediaService {
     }
 
     const authToken = await this.getAuthToken();
-    const containerName = this.getRequiredConfig('CONTAINER_NAME'); // Ensure it's set properly
+    const containerName = this.getRequiredConfig('CONTAINER_NAME'); // ex: 'cdn'
 
-    // Chỉnh sửa phần này để xử lý URL đầy đủ
+    console.log('Received file URLs:', fileUrls);
+
     const filePaths = fileUrls.map((url) => {
       try {
-        const parsed = new URL(url); // Parse full URL
-        const fullPath = parsed.pathname; // /v1/AUTH_xxx/cdn/hust4l/desc/fb.png
-        const idx = fullPath.indexOf(containerName); // Ensure that the container name is correct
-        if (idx === -1)
-          throw new Error('Invalid URL or missing container name');
-        return fullPath.slice(idx + containerName.length + 1); // Skip container part
-      } catch (err) {
+        const fullPath = url.startsWith('http') ? new URL(url).pathname : url;
+        const normalized = fullPath.replace(/^\/+/, ''); // xóa leading slash nếu có
+
+        // Đảm bảo luôn giữ lại container name ở đầu (ví dụ: "cdn/...")
+        if (!normalized.startsWith(`${containerName}/`)) {
+          throw new BadRequestException({
+            message: `File path must start with container name "${containerName}"`,
+            details: url,
+            code: 'INVALID_PATH',
+          });
+        }
+
+        return normalized;
+      } catch {
         throw new BadRequestException({
           message: 'Invalid file URL provided',
           details: url,
@@ -160,6 +168,14 @@ export class MediaService {
     const bulkDeleteUrl = `${this.BASE_URL}?bulk-delete`;
 
     try {
+      console.log('📤 Sending DELETE request to CDN:');
+      console.log('➡️ URL:', bulkDeleteUrl);
+      console.log('🧾 Body:', bodyData);
+      console.log('🪪 Headers:', {
+        'X-Auth-Token': authToken,
+        'Content-Type': 'text/plain',
+      });
+
       const response = await axios.post(bulkDeleteUrl, bodyData, {
         headers: {
           'X-Auth-Token': authToken,
