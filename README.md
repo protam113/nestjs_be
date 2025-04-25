@@ -72,7 +72,7 @@ PORT=8080                # The port where the app will run
 NODE_ENV=development     # Set the environment to development, production, etc.
 
 # Database settings
-MONGODB_URI=mongodb://localhost:27017/hust4l  # MongoDB connection URI
+MONGODB_URI=mongodb://localhost:27017/"" YOUR DB NAME ""  # MongoDB connection URI
 
 # Redis settings
 REDIS_HOST=localhost     # The address of the Redis server
