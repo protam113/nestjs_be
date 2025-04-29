@@ -1,18 +1,16 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { RedisCacheService } from '../cache/redis-cache.service';
+import { buildCacheKey } from 'src/utils/cache-key.util';
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
   private readonly AUTH_URL: string;
   private readonly BASE_URL: string;
   private readonly SWIFT_USERNAME: string;
   private readonly SWIFT_PASSWORD: string;
   private readonly PROJECT_ID: string;
-
-  private readonly redis = require('redis');
-  private client;
 
   constructor(
     private readonly configService: ConfigService,
@@ -33,10 +31,16 @@ export class MediaService {
     }
     return value;
   }
+
   async getAuthToken(): Promise<string> {
-    let token = (await this.cacheService.get('XAuthToken')) as string;
+    const cacheKey = buildCacheKey('XAuthToken', {});
+    this.logger.log('Cache key:', cacheKey);
+
+    let token = (await this.cacheService.get(cacheKey)) as string | undefined;
 
     if (!token) {
+      this.logger.warn('Token not found in cache, fetching from API...');
+
       const authPayload = {
         auth: {
           identity: {
@@ -59,20 +63,37 @@ export class MediaService {
       };
 
       try {
-        const response = await axios.post(this.AUTH_URL, authPayload, {
+        const response = await fetch(this.AUTH_URL, {
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify(authPayload),
         });
 
-        token = response.headers['x-subject-token'];
+        if (!response.ok) {
+          const errorData = await response.text(); // text() vì có thể nhận HTML
+          this.logger.error('Error response from API:', errorData);
+          throw new Error('Failed to fetch token from API');
+        }
+
+        token = response.headers.get('x-subject-token') || '';
 
         if (token) {
-          await this.cacheService.set('XAuthToken', token, 3600);
+          await this.cacheService.set(cacheKey, token, 3600);
+          this.logger.log('New token fetched and cached successfully.');
+        } else {
+          this.logger.error('Token not found in response headers.');
+          throw new Error('Token not found in response headers.');
         }
       } catch (error) {
-        throw new Error('Error fetching token from VStorage: ' + error.message);
+        this.logger.error('Fetch error:', (error as Error).message);
+        throw new Error(
+          'Error fetching token from VStorage: ' + (error as Error).message
+        );
       }
+    } else {
+      this.logger.log('Cache hit for token');
     }
 
     return token;
@@ -89,34 +110,50 @@ export class MediaService {
       });
     }
 
-    const authToken = await this.getAuthToken();
+    const cacheKeyPattern = buildCacheKey('XAuthToken', {}); // chuẩn bị cache pattern
 
+    let authToken = await this.getAuthToken();
     const sanitizedPath = folderPath.replace(/^\/+|\/+$/g, '');
     const uploadPath = `${this.BASE_URL}${sanitizedPath}/${file.originalname}`;
 
-    try {
-      const response = await axios.put(uploadPath, file.buffer, {
+    const attemptUpload = async (token: string) => {
+      const response = await fetch(uploadPath, {
+        method: 'PUT',
         headers: {
-          'X-Auth-Token': authToken,
+          'X-Auth-Token': token,
           'Content-Type': file.mimetype,
         },
+        body: file.buffer,
       });
 
-      if (response.status === 201) {
-        return { url: uploadPath };
-      } else {
+      return response;
+    };
+
+    try {
+      let response = await attemptUpload(authToken);
+
+      if (response.status === 401) {
+        this.logger.warn(
+          'Token expired. Deleting cache and retrying with new token.'
+        );
+
+        await this.cacheService.delByPattern(`${cacheKeyPattern}*`); // xóa mọi biến thể token
+        authToken = await this.getAuthToken(); // lấy token mới
+        response = await attemptUpload(authToken); // retry lần 2
+      }
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        this.logger.error('Error uploading file:', errorData);
         throw new BadRequestException({
           message: 'Failed to upload file to storage',
           code: 'UPLOAD_FAILED',
         });
       }
+
+      return { url: uploadPath };
     } catch (error) {
-      if (error.response?.status === 401) {
-        throw new BadRequestException({
-          message: 'Authentication failed for file upload',
-          code: 'AUTH_FAILED',
-        });
-      }
+      if (error instanceof BadRequestException) throw error;
       throw new BadRequestException({
         message: 'File upload failed',
         details: error.message,
@@ -176,17 +213,21 @@ export class MediaService {
         'Content-Type': 'text/plain',
       });
 
-      const response = await axios.post(bulkDeleteUrl, bodyData, {
+      const response = await fetch(bulkDeleteUrl, {
+        method: 'POST',
         headers: {
           'X-Auth-Token': authToken,
           'Content-Type': 'text/plain',
         },
+        body: bodyData, // Body chứa dữ liệu file cần xóa
       });
 
-      if (response.status !== 200) {
+      if (!response.ok) {
+        const errorData = await response.text();
+        this.logger.error('Error deleting files:', errorData);
         throw new BadRequestException({
           message: 'Failed to delete files from storage',
-          response: response.data,
+          response: errorData,
           code: 'DELETE_FAILED',
         });
       }
@@ -198,7 +239,7 @@ export class MediaService {
     } catch (error) {
       throw new BadRequestException({
         message: 'File deletion failed',
-        details: error.response?.data || error.message,
+        details: error.message,
         code: 'DELETE_ERROR',
       });
     }

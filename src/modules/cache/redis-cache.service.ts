@@ -1,81 +1,86 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Cache } from 'cache-manager';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Inject,
+} from '@nestjs/common';
 import { Redis } from 'ioredis';
 
 @Injectable()
-export class RedisCacheService {
+export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisCacheService.name);
-  private redisClient: Redis;
 
-  constructor(@Inject(CACHE_MANAGER) private readonly cache: Cache) {
-    // Access the store client directly
-    this.redisClient =
-      (this.cache as any).store?.getClient?.() ||
-      (this.cache as any).store?.client;
+  constructor(@Inject('REDIS_CLIENT') private readonly redisClient: Redis) {}
 
-    if (!this.redisClient) {
-      this.logger.warn(
-        'Redis client not available. Pattern-based deletion will not work.'
-      );
-    } else {
-      this.logger.log('Redis client initialized successfully');
-    }
+  onModuleInit() {
+    this.redisClient.on('connect', () => {
+      this.logger.log('Redis connected successfully');
+    });
+    this.redisClient.on('error', (error) => {
+      this.logger.error('[Redis] Connection error:', error);
+    });
+    this.redisClient.on('reconnecting', () => {
+      this.logger.warn('[Redis] Reconnecting...');
+    });
   }
 
-  // Kiểm tra lại Redis Client khi khởi tạo module
-  async onModuleInit() {
+  async onModuleDestroy() {
     if (this.redisClient) {
-      this.logger.log('Redis client is available');
-    } else {
-      this.logger.warn('Redis client is not available');
+      await this.redisClient.quit();
+      this.logger.log('Redis client connection closed');
     }
   }
 
-  // Lấy giá trị từ Redis cache
   async get<T>(key: string): Promise<T | null> {
     try {
-      const value = await this.cache.get<T>(key);
-      return value || null;
+      const raw = await this.redisClient.get(key);
+      if (raw) {
+        this.logger.log(`Cache HIT for key: ${key}`);
+        return JSON.parse(raw) as T;
+      } else {
+        this.logger.warn(`Cache MISS for key: ${key}`);
+        return null;
+      }
     } catch (error) {
       this.logger.error('Error getting value from Redis', error);
       return null;
     }
   }
 
-  // Lưu giá trị vào Redis cache
   async set(key: string, value: any, ttl: number = 60): Promise<void> {
     try {
-      await this.cache.set(key, value, ttl); // Set TTL cho cache
+      const stringValue = JSON.stringify(value);
+      await this.redisClient.set(key, stringValue, 'EX', ttl);
+      this.logger.log(`Cache SET for key: ${key} with TTL: ${ttl}s`);
     } catch (error) {
       this.logger.error('Error setting value to Redis', error);
     }
   }
 
-  // Xóa giá trị trong Redis cache
   async del(key: string): Promise<void> {
     try {
-      await this.cache.del(key);
+      await this.redisClient.del(key);
+      this.logger.log(`Cache DEL for key: ${key}`);
     } catch (error) {
-      this.logger.error('Error deleting value from Redis', error);
+      this.logger.error('Error deleting key from Redis', error);
     }
   }
 
-  // Reset tất cả dữ liệu trong Redis
   async reset(): Promise<void> {
     try {
-      await this.redisClient.flushall(); // Xóa tất cả dữ liệu trong Redis
+      await this.redisClient.flushall();
+      this.logger.log('Redis cache flushed');
     } catch (error) {
-      this.logger.error('Error resetting Redis cache', error);
+      this.logger.error('Error flushing Redis cache', error);
     }
   }
 
-  // Xóa cache theo pattern
   async delByPattern(pattern: string): Promise<void> {
     try {
-      const keys = await this.redisClient.keys(pattern); // Lấy tất cả keys theo pattern
+      const keys = await this.redisClient.keys(pattern);
       if (keys.length > 0) {
-        await this.redisClient.del(keys); // Xóa các keys theo pattern
+        await this.redisClient.del(...keys);
         this.logger.log(
           `Deleted ${keys.length} keys with pattern '${pattern}'`
         );

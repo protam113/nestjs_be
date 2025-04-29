@@ -4,7 +4,7 @@ import {
   NestModule,
   RequestMethod,
 } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppBaseController } from './app.base.controller';
 import { APP_GUARD } from '@nestjs/core';
 import { RolesGuard } from '../modules/auth/guards/RolesGuard';
@@ -36,12 +36,26 @@ import { SeoModule } from 'src/modules/seo/seo.module';
 import { ProjectModule } from 'src/modules/project/project.module';
 import { MediaModule } from 'src/modules/media/media.module';
 import { TrackingModule } from 'src/modules/tracking/tracking.module';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
+        store: await import('cache-manager-ioredis'),
+        host: configService.get('REDIS_HOST'),
+        port: configService.get('REDIS_PORT'),
+        password: configService.get('REDIS_PASSWORD'),
+        db: configService.get('REDIS_INDEX'),
+        ttl: 60,
+      }),
     }),
     DatabaseModule,
     RedisCacheModule,
